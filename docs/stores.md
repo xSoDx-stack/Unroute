@@ -4,7 +4,7 @@
 
 ## Подготовка файлов
 
-Из корня репозитория, Node.js 22+:
+Из корня репозитория, Node.js 22.12+:
 
 ```bash
 npm ci --prefix extensions/browser/runet-censorship-bypass

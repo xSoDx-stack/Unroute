@@ -33,7 +33,7 @@
     "release:all": "gulp buildTargets"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.12.0",
     "npm": ">=9.0.0"
   },
   "author": "anticensority+owners@googlegroups.com",
@@ -52,10 +52,10 @@
     "gulp-changed": "^4.0.3",
     "mocha": "^10.8.2",
     "plugin-error": "^1.0.1",
-    "puppeteer-core": "25.8.0",
+    "puppeteer-core": "25.16.0",
     "sinon-chrome": "^3.0.1",
     "through2": "^4.0.2",
     "tldts": "^7.4.11",
-    "web-ext": "10.6.0"
+    "web-ext": "10.8.0"
   }
 }

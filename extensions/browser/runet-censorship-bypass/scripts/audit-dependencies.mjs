@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { isAllowedAuditEntry } from './audit-policy.mjs';
 
 const severityRank = {
   info: 0,
@@ -8,15 +10,7 @@ const severityRank = {
   critical: 4,
 };
 
-// web-ext 10.6.0 -> addons-linter 10.10.0 -> image-size 2.0.2.
-// No patched image-size release exists yet. These advisories can only cause a
-// denial of service while linting crafted image files; CI only lints the
-// repository's reviewed extension assets. Keep the exception exact so any new
-// high/critical advisory still fails the build.
-const allowedImageSizeAdvisories = new Set([
-  'https://github.com/advisories/GHSA-w3rx-r6r6-pgpr',
-  'https://github.com/advisories/GHSA-5p2g-fcmc-qvqq',
-]);
+const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 
 const npmCli = process.env.npm_execpath;
 const auditCommand = npmCli ? process.execPath : 'npm';
@@ -48,23 +42,7 @@ const relevant = Object.entries(report.vulnerabilities || {}).filter(([, vulnera
   severityRank[vulnerability.severity] >= severityRank.high
 );
 
-const isExactStringChain = (vulnerability, dependencyName) =>
-  vulnerability.via.length === 1 && vulnerability.via[0] === dependencyName;
-
-const isAllowed = ([name, vulnerability]) => {
-  if (name === 'image-size') {
-    const advisoryUrls = vulnerability.via
-      .filter((item) => item && typeof item === 'object')
-      .map((item) => item.url);
-    return advisoryUrls.length === allowedImageSizeAdvisories.size &&
-      advisoryUrls.every((url) => allowedImageSizeAdvisories.has(url));
-  }
-  if (name === 'addons-linter') return isExactStringChain(vulnerability, 'image-size');
-  if (name === 'web-ext') return isExactStringChain(vulnerability, 'addons-linter');
-  return false;
-};
-
-const unapproved = relevant.filter((entry) => !isAllowed(entry));
+const unapproved = relevant.filter(([name, vulnerability]) => !isAllowedAuditEntry(name, vulnerability, lock));
 if (unapproved.length > 0) {
   console.error('npm audit found unapproved high/critical vulnerabilities:');
   for (const [name, vulnerability] of unapproved) {
@@ -74,6 +52,6 @@ if (unapproved.length > 0) {
 }
 
 if (relevant.length > 0) {
-  console.warn('Acknowledged the two pinned image-size DoS advisories used only by web-ext linting.');
+  console.warn('Acknowledged GHSA-86w9-cpqp-85rv in the pinned, unused Android adbkit authentication chain; no patched node-forge release exists.');
 }
 console.log('Dependency audit passed: no unapproved high/critical vulnerabilities.');

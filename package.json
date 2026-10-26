@@ -27,7 +27,7 @@
     "sign:firefox": "npm --prefix extensions/browser/runet-censorship-bypass run sign:firefox"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.12.0",
     "npm": ">=9.0.0"
   },
   "author": "anticensority+owners@googlegroups.com",

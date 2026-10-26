@@ -4,7 +4,7 @@ This is a GPL-3.0-or-later fork of anticensority/runet-censorship-bypass, with a
 
 ## Reproduce the submission
 
-Extract the source ZIP. From its root, using Node.js 22 or newer and npm 9 or newer:
+Extract the source ZIP. From its root, using Node.js 22.12 or newer and npm 9 or newer:
 
 ```sh
 npm ci --prefix extensions/browser/runet-censorship-bypass
@@ -24,6 +24,8 @@ PAC scripts are fetched from the selected provider or a user-entered URL, lexica
 The selected proxy receives normal routed browser connections; configured proxy credentials are supplied to the matching proxy authentication challenge. Explicit menu commands can open third-party services with a URL/domain. PRIVACY.md documents the receivers, local diagnostics, storage, control and deletion. There are no developer telemetry endpoints. The Firefox data declaration covers browsingActivity and authenticationInfo. Proxy routing is not an analytics feature. The content script runs only on `https://blocklist.rkn.gov.ru/*`, prefills the requested domain, and never solves CAPTCHA or submits the form.
 
 ## Functional testing
+
+The dependency audit blocks high/critical advisories. As of 2026-10-26, its only exception is [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv): no patched `node-forge` npm version exists. The exception is limited to `web-ext@10.8.0 -> @devicefarmer/adbkit@3.3.9 -> node-forge@1.4.0`, used by the Android TCP/USB authentication server, which release CI does not run. These development packages are not shipped in extension archives. `scripts/audit-policy.mjs` checks the exact advisory, severity, package versions, locations and forge consumer; any new issue or chain change fails the audit. The former image-size exception was removed because the updated linter uses a patched version. Re-review/remove the exception when upstream releases a fix.
 
 1. Load the extension in a clean profile. For Firefox, allow it to run in private windows in about:addons; Firefox requires this before changing profile-wide proxy settings. Accept the declared data transmission categories during installation.
 2. Open the action popup. The PAC tab selects a public provider; apply it and check the update time. A provider failure is shown in the local log.
