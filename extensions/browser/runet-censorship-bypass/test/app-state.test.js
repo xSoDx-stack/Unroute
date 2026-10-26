@@ -10,6 +10,69 @@ import { pacSync } from '../src/extension-common/core/pac-sync.js';
 import { storage } from '../src/extension-common/core/storage.js';
 
 describe('AppState initialization', () => {
+  it('keeps request initialization independent from heavy PAC restoration', async () => {
+    const originals = {
+      loggerInit: logger.init,
+      ipToHostInit: ipToHost.init,
+      errorHandlersInit: errorHandlers.init,
+      getPacMods: pacKitchen.getPacMods,
+      pacSyncInit: pacSync.init,
+      restrictLocalAccess: storage.restrictLocalAccess,
+    };
+    const calls = {
+      logger: 0,
+      ipToHost: 0,
+      errorHandlers: 0,
+      pacMods: 0,
+      pacSync: 0,
+      restrict: 0,
+    };
+
+    appState.reset();
+    logger.init = async () => { calls.logger++; };
+    ipToHost.init = async () => { calls.ipToHost++; };
+    errorHandlers.init = async () => { calls.errorHandlers++; };
+    pacKitchen.getPacMods = async () => { calls.pacMods++; return {}; };
+    pacSync.init = async () => { calls.pacSync++; };
+    storage.restrictLocalAccess = async () => { calls.restrict++; };
+
+    try {
+      await Promise.all([
+        appState.ensureRequestStateInitialized(),
+        appState.ensureRequestStateInitialized(),
+      ]);
+
+      expect(appState.isRequestStateInitialized).to.equal(true);
+      expect(appState.isInitialized).to.equal(false);
+      expect(calls).to.deep.equal({
+        logger: 1,
+        ipToHost: 1,
+        errorHandlers: 1,
+        pacMods: 1,
+        pacSync: 0,
+        restrict: 1,
+      });
+
+      await Promise.all([
+        appState.ensureInitialized(),
+        appState.ensureInitialized(),
+      ]);
+
+      expect(appState.isInitialized).to.equal(true);
+      expect(calls.pacSync).to.equal(1);
+      expect(calls.logger).to.equal(1);
+      expect(calls.pacMods).to.equal(1);
+    } finally {
+      logger.init = originals.loggerInit;
+      ipToHost.init = originals.ipToHostInit;
+      errorHandlers.init = originals.errorHandlersInit;
+      pacKitchen.getPacMods = originals.getPacMods;
+      pacSync.init = originals.pacSyncInit;
+      storage.restrictLocalAccess = originals.restrictLocalAccess;
+      appState.reset();
+    }
+  });
+
   it('deduplicates an in-flight initialization and permits retry after failure', async () => {
     const originals = {
       loggerInit: logger.init,

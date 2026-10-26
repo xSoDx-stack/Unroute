@@ -1,8 +1,10 @@
 {
   "name": "anticheburnet",
-  "version": "2.2.29",
+  "version": "2.2.30",
   "description": "АнтиЧебурнет — PAC-расширение Manifest V3 для Chromium и Firefox",
   "scripts": {
+    "store:package": "npm run build:all && npm --prefix extensions/browser/runet-censorship-bypass run store:package",
+    "store:screenshots": "npm --prefix extensions/browser/runet-censorship-bypass run store:screenshots",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
     "version": "npm run version:sync",
@@ -19,6 +21,7 @@
     "audit:ci": "npm --prefix extensions/browser/runet-censorship-bypass run audit:ci",
     "test": "npm --prefix extensions/browser/runet-censorship-bypass run test",
     "test:browser:chrome": "npm --prefix extensions/browser/runet-censorship-bypass run test:browser:chrome",
+    "test:browser:firefox": "npm --prefix extensions/browser/runet-censorship-bypass run test:browser:firefox",
     "start:firefox": "npm --prefix extensions/browser/runet-censorship-bypass run start:firefox",
     "package:firefox": "npm --prefix extensions/browser/runet-censorship-bypass run package:firefox",
     "sign:firefox": "npm --prefix extensions/browser/runet-censorship-bypass run sign:firefox"

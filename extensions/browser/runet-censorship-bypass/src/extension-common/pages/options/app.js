@@ -3,7 +3,7 @@
 import { parseCustomProxies, getRootDomain, parseProxyHostInput } from '../../core/utils.js';
 import { normalizeDomainRule, parseDomainRuleLines } from '../../core/domain-rules.js';
 import { formatLogEntryForClipboard } from '../../core/log-format.js';
-import { buildRknBlocklistUrl, normalizeRknLookupUrl } from '../../core/rkn-blocklist.js';
+import { buildRknBlocklistUrl, normalizeRknLookupDomain } from '../../core/rkn-blocklist.js';
 import { FIREFOX_PRIVATE_BROWSING_REQUIRED_ERROR_CODE } from '../../core/errors-lib.js';
 
 /**
@@ -36,6 +36,8 @@ let appState = {
   exceptionStats: { includedCount: 0, excludedCount: 0, whitelistCount: 0 },
   currentSiteMatch: { matched: false },
   currentSiteRoute: null,
+  siteResources: null,
+  currentSiteIncognito: false,
   proxyHealthMap: {},
   logsState: {
     category: 'all',
@@ -45,6 +47,7 @@ let appState = {
   },
 };
 let stateLoadRevision = 0;
+let siteRouteBusy = false;
 let externalStateRefreshTimer = null;
 
 function formatVersion(ver) {
@@ -82,6 +85,9 @@ function initElements() {
   el.setSiteProxyBtn = document.getElementById('setSiteProxyBtn');
   el.setSiteDirectBtn = document.getElementById('setSiteDirectBtn');
   el.resetSitePacBtn = document.getElementById('resetSitePacBtn');
+  for (const id of ['siteResourceSummary', 'siteResourceCount', 'siteResourceList', 'reloadSiteResourcesBtn', 'siteResourceHint']) {
+    el[id] = document.getElementById(id);
+  }
   // Exceptions (Sites Tab)
   el.excQuickInput = document.getElementById('excQuickInput');
   el.addExcQuickBtn = document.getElementById('addExcQuickBtn');
@@ -391,6 +397,7 @@ function renderCurrentSiteWidget() {
     return;
   }
 
+  renderSiteResources();
   const domain = appState.currentSiteDomain;
   el.currentSiteWidget.style.display = 'flex';
   if (el.currentSiteDomainText) {
@@ -399,7 +406,7 @@ function renderCurrentSiteWidget() {
   }
 
   const match = appState.currentSiteMatch || { matched: false };
-  const hasObservedRoute = renderObservedCurrentSiteRoute();
+  const hasObservedRoute = !appState.siteResources?.needsReload && renderObservedCurrentSiteRoute();
 
   if (match.matched) {
     if (match.isProxied) {
@@ -450,72 +457,77 @@ function renderCurrentSiteWidget() {
     if (el.setSiteDirectBtn) el.setSiteDirectBtn.style.display = 'inline-flex';
     if (el.resetSitePacBtn) el.resetSitePacBtn.style.display = 'none';
   }
-}
-
-// Action: Set Current Site to Proxy
-async function handleSetCurrentSiteProxy() {
-  if (!appState.currentSiteDomain) return;
-  const domain = getRootDomain(appState.currentSiteDomain) || appState.currentSiteDomain;
-  const res = await sendMessage({
-    action: 'SET_SINGLE_EXCEPTION',
-    domain,
-    isProxy: true,
-    currentTabId: appState.currentSiteTabId,
-  });
-  if (res.success && res.data) {
-    appState.currentSiteRoute = null;
-    appState.exceptionStats = res.data.exceptionStats || appState.exceptionStats;
-    appState.currentSiteMatch = res.data.currentSiteMatch || { matched: true, isProxied: true, isExact: true };
-    render();
-    if (!hasAnyConfiguredProxy()) {
-      showToast(`⚠️ ${domain} добавлен! Для работы настройте свой прокси во вкладке «Прокси»`, 4500);
-    } else {
-      showToast(`✓ ${domain} (и все его поддомены): добавлено в проксируемые!`);
-    }
+  // Keep both actions available: clicking the active mode explicitly reapplies
+  // it to resources that may have been changed by another site.
+  for (const [button, mode] of [[el.setSiteProxyBtn, true], [el.setSiteDirectBtn, false], [el.resetSitePacBtn, null]]) {
+    if (!button) continue;
+    button.style.display = 'inline-flex';
+    button.disabled = siteRouteBusy;
+    button.setAttribute('aria-pressed', String(mode === null ? !match.matched : match.matched && match.isProxied === mode));
   }
+  if (el.resetSitePacBtn) el.resetSitePacBtn.disabled = siteRouteBusy;
 }
 
-// Action: Set Current Site to Direct (Exclude)
-async function handleSetCurrentSiteDirect() {
-  if (!appState.currentSiteDomain) return;
-  const domain = getRootDomain(appState.currentSiteDomain) || appState.currentSiteDomain;
-  const res = await sendMessage({
-    action: 'SET_SINGLE_EXCEPTION',
-    domain,
-    isProxy: false,
-    currentTabId: appState.currentSiteTabId,
+function renderSiteResources() {
+  const info = appState.siteResources;
+  if (!el.siteResourceSummary) return;
+  if (el.resetSitePacBtn) el.resetSitePacBtn.title = info?.routing === 'domains' ?
+    'Удалить правила сайта и обнаруженных ресурсов из общих списков' :
+    'Удалить правило основного сайта и вернуть обычную обработку PAC';
+  if (el.siteResourceHint) el.siteResourceHint.textContent = info?.routing === 'tab' ?
+    'Firefox: правило основного домена действует на все запросы вкладки. Домены ресурсов в списки не добавляются; другие сайты не затрагиваются.' :
+    info?.routing === 'domains' ?
+      'Собственный прокси: режим применяется и к ресурсам. Правила общие для всех сайтов. Новые домены добавляются автоматически; существующие правила сохраняются до следующего нажатия.' :
+      'Без собственного прокси меняется только правило домена. Стандартный PAC обрабатывает остальные ресурсы как обычно.';
+  el.siteResourceSummary.textContent = siteRouteBusy ? 'Применяем правила…' :
+    info?.routing === 'tab' ? 'Вся вкладка следует правилу основного домена. После переключения перезагрузите страницу.' :
+    appState.currentSiteIncognito ? 'Приватная вкладка: меняется только основной домен. Ресурсы не сохраняются.' :
+    info?.error ? `Правила не применены: ${info.error}` :
+    info?.needsReload ? 'Правила обновлены. Перезагрузите страницу для применения ко всем запросам.' :
+    info?.count ? `Обнаружено доменов: ${info.count}${info.limited ? ' (достигнут лимит)' : ''}` :
+    'Перезагрузите страницу, чтобы обнаружить её ресурсы.';
+  el.siteResourceCount.textContent = String(info?.count || 0);
+  const items = (info?.hosts || []).map((host) => {
+    const li = document.createElement('li');
+    li.textContent = host;
+    return li;
   });
-  if (res.success && res.data) {
-    appState.currentSiteRoute = null;
-    appState.exceptionStats = res.data.exceptionStats || appState.exceptionStats;
-    appState.currentSiteMatch = res.data.currentSiteMatch || { matched: true, isProxied: false, isExact: true };
-    render();
-    showToast(`✓ ${domain} (и все его поддомены): переведено на прямое соединение`);
-  }
+  el.siteResourceList.replaceChildren(...items);
+  el.reloadSiteResourcesBtn.hidden = info?.routing !== 'tab' && (appState.currentSiteIncognito ||
+    Boolean(info?.count && !info?.needsReload));
+  el.reloadSiteResourcesBtn.disabled = siteRouteBusy;
 }
 
-// Action: Reset Current Site back to PAC rules
-async function handleResetCurrentSitePac() {
-  if (!appState.currentSiteDomain) return;
+async function setCurrentSiteRoute(mode) {
+  if (!appState.currentSiteDomain || siteRouteBusy) return;
   const domain = getRootDomain(appState.currentSiteDomain) || appState.currentSiteDomain;
-  const res = await sendMessage({
-    action: 'SET_SINGLE_EXCEPTION',
-    domain,
-    isProxy: null,
-    currentTabId: appState.currentSiteTabId,
-  });
-  if (res.success && res.data) {
+  siteRouteBusy = true;
+  renderCurrentSiteWidget();
+  try {
+    const res = await sendMessage({
+      action: 'SET_SITE_ROUTE', domain, isProxy: mode,
+      currentTabId: appState.currentSiteTabId,
+    });
+    if (!res.success || !res.data) throw new Error(res.error || 'Не удалось изменить маршрут');
     appState.currentSiteRoute = null;
     appState.exceptionStats = res.data.exceptionStats || appState.exceptionStats;
     appState.currentSiteMatch = res.data.currentSiteMatch || { matched: false };
+    appState.siteResources = res.data.siteResources || null;
+    const label = mode === null ? 'по PAC' : mode ? 'через прокси' : 'напрямую';
+    const scope = appState.siteResources?.routing === 'tab' ? 'Вся вкладка' :
+      appState.siteResources?.routing === 'domains' ? `${domain} и найденные ресурсы` : domain;
+    showToast(`✓ ${scope}: ${label}. Перезагрузите страницу.`, 5000);
+  } catch (error) {
+    showToast(`Не удалось применить режим: ${error.message}`, 6000);
+  } finally {
+    siteRouteBusy = false;
     render();
-    const removedRules = res.data.removedRuleKeys || [];
-    const removalDetails = removedRules.length
-      ? ` Удалено: ${removedRules.join(', ')}`
-      : '';
-    showToast(`🔄 ${domain} (и все поддомены): сброшено на стандартные правила PAC.${removalDetails}`);
   }
 }
+
+const handleSetCurrentSiteProxy = () => setCurrentSiteRoute(true);
+const handleSetCurrentSiteDirect = () => setCurrentSiteRoute(false);
+const handleResetCurrentSitePac = () => setCurrentSiteRoute(null);
 
 // Check if at least one proxy / tor / warp is working
 function hasAnyWorkingProxy() {
@@ -1561,6 +1573,7 @@ async function loadState(currentDomain = '', currentTabId = null, { preloadLogs 
     appState.proxyHealthMap = res.data.proxyHealthMap || {};
     appState.currentSiteMatch = res.data.currentSiteMatch || { matched: false };
     appState.currentSiteRoute = res.data.currentSiteRoute || null;
+    appState.siteResources = res.data.siteResources || null;
     render();
   }
 
@@ -1571,9 +1584,11 @@ async function loadState(currentDomain = '', currentTabId = null, { preloadLogs 
 async function refreshStateFromActiveTab({ preloadLogs = false } = {}) {
   let domain = '';
   let currentTabId = null;
+  appState.currentSiteIncognito = false;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab && tab.url) {
+      appState.currentSiteIncognito = Boolean(tab.incognito);
       const domainInfo = extractValidWebDomain(tab.url);
       if (domainInfo) {
         domain = domainInfo.rootDomain || domainInfo.fullHost;
@@ -1601,6 +1616,7 @@ function scheduleExternalStateRefresh() {
 function setupExternalStateRefresh() {
   if (chrome.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'session' && changes?.['site-resource-tabs']) scheduleExternalStateRefresh();
       if (areaName === 'local' &&
           Object.prototype.hasOwnProperty.call(changes || {}, PAC_MODS_STORAGE_KEY)) {
         scheduleExternalStateRefresh();
@@ -1616,6 +1632,19 @@ function setupExternalStateRefresh() {
 
 // Event Listeners
 function setupEvents() {
+  el.reloadSiteResourcesBtn?.addEventListener('click', async () => {
+    try {
+      const tab = await chrome.tabs.get(appState.currentSiteTabId);
+      const info = extractValidWebDomain(tab.url);
+      if (!info || info.rootDomain !== appState.currentSiteDomain) {
+        throw new Error('Вкладка сменила сайт. Откройте расширение заново.');
+      }
+      await chrome.tabs.reload(tab.id);
+      window.close();
+    } catch (error) {
+      showToast(error.message, 5000);
+    }
+  });
   const activateActionableError = (event, action) => {
     if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
       return;
@@ -2089,25 +2118,25 @@ function setupEvents() {
   // Diagnostics: Check Blacklist
   if (el.checkBlacklistBtn) {
     el.checkBlacklistBtn.addEventListener('click', async () => {
-      let lookupUrl = '';
+      let lookupDomain = '';
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        lookupUrl = normalizeRknLookupUrl(tab?.url || tab?.pendingUrl || '');
+        lookupDomain = normalizeRknLookupDomain(tab?.url || tab?.pendingUrl || '');
       } catch {
         // Fall back to the domain captured when the extension UI was opened.
       }
 
-      if (!lookupUrl && appState.currentSiteDomain) {
-        lookupUrl = normalizeRknLookupUrl(`https://${appState.currentSiteDomain}/`);
+      if (!lookupDomain && appState.currentSiteDomain) {
+        lookupDomain = normalizeRknLookupDomain(appState.currentSiteDomain);
       }
 
-      if (!lookupUrl) {
+      if (!lookupDomain) {
         showToast('Откройте обычный сайт и повторите проверку');
         return;
       }
 
       try {
-        await chrome.tabs.create({ url: buildRknBlocklistUrl(lookupUrl) });
+        await chrome.tabs.create({ url: buildRknBlocklistUrl(lookupDomain) });
       } catch {
         showToast('Не удалось открыть официальный сервис Роскомнадзора');
       }

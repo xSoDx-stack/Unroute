@@ -1,8 +1,10 @@
 {
   "name": "anticheburnet",
-  "version": "2.2.29",
+  "version": "2.2.30",
   "description": "АнтиЧебурнет — PAC-расширение Manifest V3 для Chromium и Firefox",
   "scripts": {
+    "store:package": "node scripts/package-stores.mjs",
+    "store:screenshots": "node scripts/store-screenshots.mjs",
     "version:check": "node ../../../scripts/sync-version.mjs --check",
     "prelint": "npm run version:check",
     "prelint:firefox": "npm run release:firefox",
@@ -17,6 +19,7 @@
     "gulp": "gulp",
     "test": "mocha --recursive test/**/*.test.js",
     "test:browser:chrome": "node test/browser/chrome-smoke.js",
+    "test:browser:firefox": "node test/browser/firefox-tabs-smoke.js",
     "prestart:firefox": "npm run release:firefox",
     "start:firefox": "web-ext run --source-dir build/extension-firefox",
     "prepackage:firefox": "npm run release:firefox",
@@ -39,6 +42,7 @@
     "serialize-javascript": "^7.0.5"
   },
   "devDependencies": {
+    "jszip": "3.10.1",
     "acorn": "^8.18.0",
     "chai": "^4.5.0",
     "del": "^6.1.1",

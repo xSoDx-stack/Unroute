@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { verifySiteResources } from './site-resources-scenario.js';
 
 const TEST_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_ROOT = path.resolve(TEST_ROOT, '..', '..', 'build', 'extension-chromium');
@@ -59,10 +60,10 @@ function assertBuiltExtension() {
   assert.equal(manifest.background && manifest.background.service_worker, 'service-worker.js');
 }
 
-function listen(server) {
+function listen(server, host = '127.0.0.1') {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, host, () => {
       server.off('error', reject);
       resolve(server.address().port);
     });
@@ -92,6 +93,33 @@ function withTimeout(promise, message, timeoutMs = TIMEOUT_MS) {
       timer = setTimeout(() => reject(new Error(message)), timeoutMs);
     }),
   ]).finally(() => clearTimeout(timer));
+}
+
+async function createRequestBurstServer() {
+  let requests = 0;
+  const server = http.createServer((request, response) => {
+    requests++;
+    request.resume();
+    if (request.url === '/') {
+      response.writeHead(200, {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/html; charset=utf-8',
+      });
+      response.end('<!doctype html><title>AntiCheburnet request stress</title>');
+      return;
+    }
+    response.writeHead(204, {
+      'Cache-Control': 'no-store',
+      'Connection': 'close',
+    });
+    response.end();
+  });
+  const port = await listen(server, '127.0.0.2');
+  return {
+    get requests() { return requests; },
+    port,
+    server,
+  };
 }
 
 async function createAuthenticatedProxy(username, password) {
@@ -164,7 +192,7 @@ async function launchChrome(executablePath, profilePath) {
       '--disable-default-apps',
       '--disable-gpu',
       '--disable-sync',
-      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost',
+      '--host-resolver-rules=MAP *.example.test 127.0.0.1, MAP *.cdn.test 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE 127.0.0.2, EXCLUDE localhost',
       '--metrics-recording-only',
       '--no-default-browser-check',
       '--no-first-run',
@@ -325,6 +353,7 @@ async function runChromeSmoke() {
   const password = `browser-smoke-${Date.now()}`;
   const authProxy = await createAuthenticatedProxy(username, password);
   const wrongAuthProxy = await createInterruptedWrongAuthProxy();
+  const requestBurst = await createRequestBurstServer();
   let browser = null;
 
   try {
@@ -346,6 +375,104 @@ async function runChromeSmoke() {
     assert.equal(initialState && initialState.success, true);
     assert.equal(initialState.data.syncState.currentPacProviderKey, 'onlyOwnSites');
     assert.equal(initialState.data.syncState.hasPacData, true);
+
+    // Regression coverage for a large user-maintained domain list. The
+    // request observer must perform direct key lookups rather than enumerate
+    // the full collection for every browser request.
+    const largeExceptions = { '127.0.0.2': false };
+    for (let i = 0; i < 33000; i++) {
+      largeExceptions[`domain-${i}.example.com`] = true;
+    }
+    const largeRulesResult = await sendMessage(optionsPage, {
+      action: 'SAVE_MODS',
+      mods: { exceptions: largeExceptions },
+    });
+    assert.equal(largeRulesResult && largeRulesResult.success, true);
+
+    await session.worker.evaluate(() => {
+      const originalObjectKeys = Object.keys;
+      const originalHasOwnProperty = Object.prototype.hasOwnProperty;
+      globalThis.__blockInformerPerf = {
+        largeEnumerations: 0,
+        largeEnumerationStacks: [],
+        requestPathLargeEnumerations: 0,
+        matchChecks: 0,
+        originalHasOwnProperty,
+        originalObjectKeys,
+      };
+      Object.keys = function(value) {
+        const result = originalObjectKeys(value);
+        if (result.length > 10000) {
+          const stack = new Error().stack;
+          globalThis.__blockInformerPerf.largeEnumerations++;
+          if (globalThis.__blockInformerPerf.largeEnumerationStacks.length < 5) {
+            globalThis.__blockInformerPerf.largeEnumerationStacks.push(stack);
+          }
+          if (stack.includes('/core/block-informer.js')) {
+            globalThis.__blockInformerPerf.requestPathLargeEnumerations++;
+          }
+        }
+        return result;
+      };
+      Object.prototype.hasOwnProperty = function(key) {
+        if (key === '127.0.0.2') {
+          globalThis.__blockInformerPerf.matchChecks++;
+        }
+        return originalHasOwnProperty.call(this, key);
+      };
+    });
+
+    const stressPage = await browser.newPage();
+    await stressPage.goto(`http://127.0.0.2:${requestBurst.port}/`, {
+      timeout: TIMEOUT_MS,
+      waitUntil: 'domcontentloaded',
+    });
+    const stressRequestCount = 2000;
+    await stressPage.evaluate(async (count) => {
+      const batchSize = 100;
+      for (let offset = 0; offset < count; offset += batchSize) {
+        await Promise.all(Array.from(
+          { length: Math.min(batchSize, count - offset) },
+          (_, index) => fetch(`/resource-${offset + index}?nonce=${Math.random()}`, {
+            cache: 'no-store',
+          })
+        ));
+      }
+    }, stressRequestCount);
+    await stressPage.close();
+
+    const observerDeadline = Date.now() + TIMEOUT_MS;
+    let observerStats = null;
+    do {
+      observerStats = await session.worker.evaluate(() => ({
+        largeEnumerations: globalThis.__blockInformerPerf.largeEnumerations,
+        largeEnumerationStacks: globalThis.__blockInformerPerf.largeEnumerationStacks,
+        requestPathLargeEnumerations:
+          globalThis.__blockInformerPerf.requestPathLargeEnumerations,
+        matchChecks: globalThis.__blockInformerPerf.matchChecks,
+      }));
+      if (observerStats.matchChecks >= stressRequestCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } while (Date.now() < observerDeadline);
+
+    await session.worker.evaluate(() => {
+      Object.keys = globalThis.__blockInformerPerf.originalObjectKeys;
+      Object.prototype.hasOwnProperty = globalThis.__blockInformerPerf.originalHasOwnProperty;
+      delete globalThis.__blockInformerPerf;
+    });
+    assert.ok(observerStats.matchChecks >= stressRequestCount);
+    assert.equal(
+      observerStats.requestPathLargeEnumerations,
+      0,
+      `Request-path Object.keys calls:\n${observerStats.largeEnumerationStacks.join('\n---\n')}`
+    );
+    assert.ok(requestBurst.requests >= stressRequestCount);
+
+    const clearLargeRulesResult = await sendMessage(optionsPage, {
+      action: 'SAVE_MODS',
+      mods: { exceptions: {} },
+    });
+    assert.equal(clearLargeRulesResult && clearLargeRulesResult.success, true);
 
     const saveResult = await sendMessage(optionsPage, {
       action: 'SAVE_MODS',
@@ -463,6 +590,7 @@ async function runChromeSmoke() {
     }
     assert.equal(recoveredControl?.levelOfControl, 'controlled_by_this_extension');
     assert.equal(recoveredControl?.value?.mode, 'pac_script');
+    await verifySiteResources(browser, optionsPage, authProxy, { username, password });
     await optionsPage.close();
 
     console.log(`Chrome MV3 smoke passed with ${await browser.version()}.`);
@@ -472,6 +600,7 @@ async function runChromeSmoke() {
     wrongAuthProxy.releaseChallenge();
     await closeServer(authProxy.server).catch(() => undefined);
     await closeServer(wrongAuthProxy.server).catch(() => undefined);
+    await closeServer(requestBurst.server).catch(() => undefined);
     removeTemporaryDirectory(helperRoot, 'anticheburnet-owner-');
     removeTemporaryDirectory(profilePath, 'anticheburnet-chrome-');
   }

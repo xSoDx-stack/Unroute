@@ -9,6 +9,8 @@ import {
 } from '../src/extension-common/core/block-informer.js';
 import { httpLib } from '../src/extension-common/core/http-lib.js';
 import { logger } from '../src/extension-common/core/logger.js';
+import { pacKitchen } from '../src/extension-common/core/pac-kitchen.js';
+import { appState } from '../src/extension-common/core/app-state.js';
 
 describe('BlockInformer & IpToHost', () => {
   let origHttpLibGet;
@@ -125,6 +127,162 @@ describe('BlockInformer & IpToHost', () => {
     expect(stats.hosts).to.include('rutracker.org');
 
     blockInformer.clearTab(tabId);
+  });
+
+  it('does not enumerate a large exception collection for each request', async () => {
+    const tabId = 1002;
+    const originalGetCachedMods = pacKitchen.getCachedMods;
+    const originalRequestState = appState.isRequestStateInitialized;
+    const exceptions = {};
+    for (let i = 0; i < 33000; i++) {
+      exceptions[`domain-${i}.example.com`] = true;
+    }
+    let ownKeysCalls = 0;
+    const guardedExceptions = new Proxy(exceptions, {
+      ownKeys(target) {
+        ownKeysCalls++;
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    blockInformer.clearTab(tabId);
+    appState.isRequestStateInitialized = true;
+    pacKitchen.getCachedMods = () => ({
+      exceptions: guardedExceptions,
+      filteredCustomsString: 'PROXY proxy.example:443',
+    });
+
+    try {
+      await blockInformer.handleRequest({
+        tabId,
+        url: 'https://not-listed.example.net/resource.js',
+        ip: '8.8.8.8',
+        type: 'script',
+      });
+
+      expect(ownKeysCalls).to.equal(0);
+      expect(blockInformer.getTabStats(tabId).count).to.equal(0);
+    } finally {
+      pacKitchen.getCachedMods = originalGetCachedMods;
+      appState.isRequestStateInitialized = originalRequestState;
+      blockInformer.clearTab(tabId);
+    }
+  });
+
+  it('updates the action only when tab proxy data changes', () => {
+    const tabId = 1003;
+    const originalAction = chrome.action;
+    const calls = { background: 0, text: 0, title: 0 };
+
+    blockInformer.clearTab(tabId);
+    chrome.action = {
+      setBadgeBackgroundColor: (_options, callback) => {
+        calls.background++;
+        if (callback) callback();
+      },
+      setBadgeText: (_options, callback) => {
+        calls.text++;
+        if (callback) callback();
+      },
+      setTitle: (_options, callback) => {
+        calls.title++;
+        if (callback) callback();
+      },
+    };
+
+    try {
+      for (let i = 0; i < 100; i++) {
+        blockInformer.recordProxiedHost(tabId, 'assets.example', 'proxy.example:443', false);
+      }
+      expect(calls).to.deep.equal({ background: 1, text: 1, title: 1 });
+
+      blockInformer.recordProxiedHost(tabId, 'api.example', 'proxy.example:443', false);
+      expect(calls).to.deep.equal({ background: 1, text: 2, title: 2 });
+
+      blockInformer.recordProxiedHost(
+        tabId,
+        'assets.example',
+        'proxy.example:443',
+        true,
+        'pac',
+        'configured'
+      );
+      expect(calls).to.deep.equal({ background: 1, text: 3, title: 3 });
+    } finally {
+      chrome.action = originalAction;
+      blockInformer.clearTab(tabId);
+    }
+  });
+
+  it('uses the known-host fast path while retaining a newly observed endpoint', async () => {
+    const tabId = 1004;
+    const originalGetCachedMods = pacKitchen.getCachedMods;
+    let modsReads = 0;
+    pacKitchen.getCachedMods = () => {
+      modsReads++;
+      return { exceptions: {} };
+    };
+    blockInformer.clearTab(tabId);
+    blockInformer.recordProxiedHost(
+      tabId,
+      'assets.example',
+      'first.proxy.example:443',
+      false
+    );
+
+    try {
+      for (let i = 0; i < 100; i++) {
+        await blockInformer.handleRequest({
+          tabId,
+          url: `https://assets.example/resource-${i}.js`,
+          type: 'script',
+        });
+      }
+      expect(modsReads).to.equal(0);
+
+      await blockInformer.handleRequest({
+        tabId,
+        url: 'https://assets.example/new-endpoint.js',
+        type: 'script',
+        proxyInfo: {
+          type: 'https',
+          host: 'second.proxy.example',
+          port: 443,
+        },
+      });
+      expect(blockInformer.getTabStats(tabId).proxies)
+        .to.include('second.proxy.example:443');
+      expect(modsReads).to.equal(0);
+    } finally {
+      pacKitchen.getCachedMods = originalGetCachedMods;
+      blockInformer.clearTab(tabId);
+    }
+  });
+
+  it('does not retain private browsing requests in statistics, routes, or logs', async () => {
+    const tabId = 1010;
+    const originalAdd = logger.add;
+    const entries = [];
+    logger.add = (entry) => entries.push(entry);
+    blockInformer.clearTab(tabId);
+    try {
+      const details = {
+        tabId,
+        incognito: true,
+        url: 'https://private.example/sensitive',
+        type: 'main_frame',
+        proxyInfo: { type: 'https', host: 'proxy.example', port: 443 },
+        error: 'net::ERR_TUNNEL_CONNECTION_FAILED',
+      };
+      await blockInformer.handleRequest(details);
+      blockInformer.handleConnectionError(details);
+      expect(blockInformer.getTabStats(tabId)).to.deep.equal({ count: 0, hosts: [], proxies: [] });
+      expect(await blockInformer.getTabRoute(tabId)).to.equal(null);
+      expect(entries).to.have.lengthOf(0);
+    } finally {
+      logger.add = originalAdd;
+      blockInformer.clearTab(tabId);
+    }
   });
 
   it('records only top-level proxy request failures as non-fatal warnings', () => {

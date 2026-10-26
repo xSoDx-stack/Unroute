@@ -8,6 +8,8 @@ import { errorHandlers } from './core/error-handlers.js';
 import { setupContextMenus, createContextMenuItems } from './core/context-menus.js';
 import { setupMessageBus } from './core/message-bus.js';
 import { proxyBackend } from './core/proxy-backend.js';
+import { siteResources } from './core/site-resources.js';
+import { tabProxyRouter } from './core/tab-proxy-router.js';
 
 console.log('[Service Worker] Initializing Runet Censorship Bypass (MV3)...');
 
@@ -17,6 +19,8 @@ setupAuthListener();
 setupContextMenus();
 errorHandlers.setupListeners();
 blockInformer.init();
+siteResources.setup();
+tabProxyRouter.setup();
 
 // 2. Alarms listener for background periodic synchronization (ensuring state is initialized)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -64,7 +68,8 @@ chrome.runtime.onStartup.addListener(async () => {
   }
 });
 
-// 6. Asynchronously trigger state rehydration in background for current SW instance
-appState.ensureInitialized().catch((err) => {
-  console.warn('[Service Worker] Background ensureInitialized warning:', err);
+// 6. Warm only request-critical state. Full PAC restoration remains lazy and is
+// performed by startup/install, proxy-control, alarm and message handlers.
+appState.ensureRequestStateInitialized().catch((err) => {
+  console.warn('[Service Worker] Background request state initialization warning:', err);
 });

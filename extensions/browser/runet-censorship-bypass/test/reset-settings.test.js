@@ -110,6 +110,7 @@ describe('Reset Settings & Ghost Data Prevention (Item 2)', () => {
     pacSync.rawPacData = '/* custom pac */';
     pacSync.cookedPacData = '/* custom cooked pac */';
     await pacSync.persistState();
+    await pacSync.persistFreshness();
     logger.error('system', 'Старая ошибка', 'Должна исчезнуть после сброса');
     errorHandlers.addError({ type: 'old-error', timestamp: Date.now() });
     await errorHandlers.setNotificationOption('ext-error', false);
@@ -151,6 +152,7 @@ describe('Reset Settings & Ghost Data Prevention (Item 2)', () => {
     expect(rawStorage).to.exist;
     expect(rawStorage.currentPacProviderKey).to.equal('Антизапрет');
     expect(rawStorage.customPacUrl).to.equal('');
+    expect(await storage.get('antiCensorPacFreshness', null)).to.equal(null);
 
     expect(logger.getLogs()).to.deep.equal([]);
     expect(errorHandlers.getLastErrors()).to.deep.equal([]);

@@ -11,3 +11,4 @@ npm-debug.log
 *.pfx
 *.crx
 *.zip
+store-artifacts/

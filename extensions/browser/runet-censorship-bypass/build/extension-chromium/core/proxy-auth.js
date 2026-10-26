@@ -374,7 +374,9 @@ export function setupAuthListener() {
             }
 
             console.log('[Proxy Auth] Authenticating proxy');
-            logger.info('auth', 'Аутентификация прокси', 'Отправка учётных данных');
+            if (!details.incognito) {
+              logger.info('auth', 'Аутентификация прокси', 'Отправка учётных данных');
+            }
 
             return {
               authCredentials: {
@@ -389,15 +391,15 @@ export function setupAuthListener() {
         };
 
         if (asyncCallback) {
-          const ready = appState.isInitialized &&
+          const ready = appState.isRequestStateInitialized &&
             (Object.keys(persistentCredentialsMap).length > 0 || Object.keys(temporaryCredentialsMap).length > 0)
             ? Promise.resolve()
-            : appState.ensureInitialized();
+            : appState.ensureRequestStateInitialized();
           ready
             .then(() => handleAuth(true))
             .then((response) => asyncCallback(response))
             .catch((err) => {
-              console.warn('[Proxy Auth] Error during auth ensureInitialized:', err);
+              console.warn('[Proxy Auth] Error during request state initialization:', err);
               // If retry state cannot be read/written reliably, do not risk an
               // unbounded authentication loop.
               asyncCallback({ cancel: true });
@@ -425,7 +427,9 @@ export function setupAuthListener() {
         }
         requestTries.set(reqId, { tries: tries + 1, updatedAt: Date.now() });
         console.log('[Proxy Auth] Authenticating proxy');
-        logger.info('auth', 'Аутентификация прокси', 'Отправка учётных данных');
+        if (!details.incognito) {
+          logger.info('auth', 'Аутентификация прокси', 'Отправка учётных данных');
+        }
         return {
           authCredentials: {
             username: String(creds.username),

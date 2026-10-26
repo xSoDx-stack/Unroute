@@ -26,6 +26,11 @@ const commonSrc = [
 const chromiumDst = './build/extension-chromium';
 const firefoxDst = './build/extension-firefox';
 
+const copyChromeNotices = () => gulp.src(['../../../LICENSE', '../../../PRIVACY.md'], { encoding: false })
+  .pipe(gulp.dest(chromiumDst));
+const copyFirefoxNotices = () => gulp.src(['../../../LICENSE', '../../../PRIVACY.md'], { encoding: false })
+  .pipe(gulp.dest(firefoxDst));
+
 const copyChromium = function() {
   return gulp.src(commonSrc, { encoding: false })
     .pipe(gulp.dest(chromiumDst));
@@ -47,9 +52,12 @@ const copyFirefoxOverrides = function() {
 };
 
 const copyFirefox = gulp.series(copyFirefoxCommon, copyFirefoxOverrides);
-const buildChrome = gulp.series(cleanChrome, copyChromium);
-const buildFirefox = gulp.series(cleanFirefox, copyFirefox);
-const buildTargets = gulp.series(clean, gulp.parallel(copyChromium, copyFirefox));
+const buildChrome = gulp.series(cleanChrome, copyChromium, copyChromeNotices);
+const buildFirefox = gulp.series(cleanFirefox, copyFirefox, copyFirefoxNotices);
+const buildTargets = gulp.series(clean, gulp.parallel(
+  gulp.series(copyChromium, copyChromeNotices),
+  gulp.series(copyFirefox, copyFirefoxNotices)
+));
 
 // Backward-compatible task used by the existing `npm run release` command.
 // Cross-browser builds use `buildTargets` through `npm run release:all`.

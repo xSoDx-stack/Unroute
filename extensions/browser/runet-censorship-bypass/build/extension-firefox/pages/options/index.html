@@ -153,23 +153,32 @@
     <!-- Active Current Website Status Card (Inside Sites Tab) -->
     <div class="current-site-widget" id="currentSiteWidget" style="display: none;">
       <div class="site-widget-info">
-        <span class="site-widget-title">Текущий открытый сайт</span>
+        <span class="site-widget-title">Сайт и его ресурсы</span>
         <div class="site-widget-domain">
           <span id="currentSiteDomainText">example.com</span>
           <span class="site-status-badge pac" id="currentSiteStatusBadge">⚡ По правилам PAC</span>
         </div>
       </div>
       <div class="site-widget-actions" id="siteWidgetActions">
-        <button class="btn btn-primary btn-sm" id="setSiteProxyBtn" title="Проксировать через свой прокси">
+        <button class="btn btn-secondary btn-sm" id="setSiteProxyBtn" title="Перевести сайт и найденные ресурсы через прокси">
           <span>⚡ Прокси</span>
         </button>
-        <button class="btn btn-secondary btn-sm" id="setSiteDirectBtn" title="Открывать напрямую (исключить)">
+        <button class="btn btn-secondary btn-sm" id="setSiteDirectBtn" title="Открывать сайт и найденные ресурсы напрямую">
           <span>⚪ Напрямую</span>
         </button>
-        <button class="btn btn-secondary btn-sm" id="resetSitePacBtn" title="Сбросить на правила PAC"
+        <button class="btn btn-secondary btn-sm" id="resetSitePacBtn" title="Удалить правила сайта и найденных ресурсов во всём браузере"
           style="display: none;">
-          <span>🔄 Сброс</span>
+          <span>По PAC</span>
         </button>
+      </div>
+      <div class="site-resource-panel">
+        <p class="site-resource-summary" id="siteResourceSummary" aria-live="polite">Наблюдаем за ресурсами страницы…</p>
+        <details id="siteResourceDetails">
+          <summary>Домены ресурсов <span id="siteResourceCount">0</span></summary>
+          <ul id="siteResourceList" class="site-resource-list"></ul>
+        </details>
+        <p class="site-resource-hint" id="siteResourceHint">Маршрутизация всех ресурсов доступна с собственным прокси, Tor или WARP.</p>
+        <button class="btn btn-secondary btn-sm" id="reloadSiteResourcesBtn" hidden>↻ Перезагрузить страницу</button>
       </div>
     </div>
 

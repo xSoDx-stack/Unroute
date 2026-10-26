@@ -61,15 +61,15 @@ if (updateJson(`${nestedRoot}/src/extension-firefox/manifest.json`, (manifest) =
 })) {
   changed.push(`${nestedRoot}/src/extension-firefox/manifest.json`);
 }
-if (updateJson(`${nestedRoot}/build/extension-chromium/manifest.json`, (manifest) => {
-  manifest.version = canonical;
-})) {
-  changed.push(`${nestedRoot}/build/extension-chromium/manifest.json`);
-}
-if (updateJson(`${nestedRoot}/build/extension-firefox/manifest.json`, (manifest) => {
-  manifest.version = canonical;
-})) {
-  changed.push(`${nestedRoot}/build/extension-firefox/manifest.json`);
+// Reviewer source archives and clean source trees have no generated build yet.
+// Check/update generated manifests when present; the build creates them from src.
+for (const target of ['chromium', 'firefox']) {
+  const manifestPath = `${nestedRoot}/build/extension-${target}/manifest.json`;
+  if (fs.existsSync(path.join(repoRoot, manifestPath)) && updateJson(manifestPath, (manifest) => {
+    manifest.version = canonical;
+  })) {
+    changed.push(manifestPath);
+  }
 }
 
 const readmePath = 'README.md';

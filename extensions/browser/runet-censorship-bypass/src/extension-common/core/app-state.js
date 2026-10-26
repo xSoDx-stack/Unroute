@@ -13,8 +13,49 @@ import { storage } from './storage.js';
  */
 class AppStateManager {
   constructor() {
+    this._requestInitPromise = null;
     this._initPromise = null;
+    this.isRequestStateInitialized = false;
     this.isInitialized = false;
+  }
+
+  /**
+   * Restores only the state needed by high-frequency request/auth handlers.
+   * Keeping PAC restoration out of this path prevents a large PAC script from
+   * being parsed every time the browser wakes the MV3 service worker.
+   * @returns {Promise<void>}
+   */
+  async ensureRequestStateInitialized() {
+    if (this.isRequestStateInitialized) {
+      return;
+    }
+    if (!this._requestInitPromise) {
+      this._requestInitPromise = (async () => {
+        try {
+          await storage.restrictLocalAccess();
+
+          // pacKitchen.getPacMods restores persistent proxy credentials too.
+          const results = await Promise.allSettled([
+            logger.init(),
+            ipToHost.init(),
+            errorHandlers.init(),
+            pacKitchen.getPacMods(),
+          ]);
+          const failedResult = results.find((result) => result.status === 'rejected');
+          if (failedResult) {
+            throw failedResult.reason;
+          }
+
+          this.isRequestStateInitialized = true;
+        } catch (err) {
+          console.error('[AppState] Request state initialization error:', err);
+          this.isRequestStateInitialized = false;
+          this._requestInitPromise = null;
+          throw err;
+        }
+      })();
+    }
+    return this._requestInitPromise;
   }
 
   /**
@@ -30,21 +71,7 @@ class AppStateManager {
     if (!this._initPromise) {
       this._initPromise = (async () => {
         try {
-          // Protect sensitive local data before any other subsystem reads it.
-          await storage.restrictLocalAccess();
-
-          // Initialize independent storage-backed singletons concurrently.
-          // (pacKitchen.getPacMods already restores proxyCredentialsMap from customProxyStringRaw)
-          const results = await Promise.allSettled([
-            logger.init(),
-            ipToHost.init(),
-            errorHandlers.init(),
-            pacKitchen.getPacMods(),
-          ]);
-          const failedResult = results.find((result) => result.status === 'rejected');
-          if (failedResult) {
-            throw failedResult.reason;
-          }
+          await this.ensureRequestStateInitialized();
 
           // Initialize PAC sync manager with restored storage settings.
           await pacSync.init();
@@ -66,7 +93,9 @@ class AppStateManager {
    * Reset initialization state (useful for tests or full reloads)
    */
   reset() {
+    this._requestInitPromise = null;
     this._initPromise = null;
+    this.isRequestStateInitialized = false;
     this.isInitialized = false;
   }
 }

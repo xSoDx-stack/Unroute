@@ -28,6 +28,7 @@ import { clearProxyAuthAttempts, resetProxyCredentialsState } from './proxy-auth
 import { utils } from './utils.js';
 import { proxyBackend } from './proxy-backend.js';
 import { blockInformer } from './block-informer.js';
+import { siteResources } from './site-resources.js';
 
 const FALLBACK_CONNECTION_TEST_URL = PAC_PROVIDERS['Антизапрет'].pacUrls[0];
 
@@ -188,6 +189,9 @@ export function setupMessageBus() {
               exceptionStats,
               currentSiteMatch,
               currentSiteRoute,
+              siteResources: currentHost ? await siteResources.summary(
+                getRequestedCurrentTabId(message), currentHost
+              ) : null,
               proxyHealthMap,
             },
           };
@@ -200,6 +204,23 @@ export function setupMessageBus() {
             data: {
               exceptions: pacMods.exceptions || {},
               whitelist: pacMods.whitelist || [],
+            },
+          };
+        }
+
+        case 'SET_SITE_ROUTE': {
+          const tabId = getRequestedCurrentTabId(message);
+          if (tabId === null) throw new Error('Не найдена вкладка сайта');
+          const result = await siteResources.setMode(tabId, message.domain, message.isProxy);
+          blockInformer.clearTab(tabId);
+          const mods = await pacKitchen.getPacMods();
+          return {
+            success: true,
+            data: {
+              ...result,
+              exceptionStats: pacKitchen.getCachedStats(),
+              currentSiteMatch: matchExceptionDomain(message.domain, mods.exceptions),
+              siteResources: await siteResources.summary(tabId, message.domain),
             },
           };
         }
@@ -449,6 +470,7 @@ export function setupMessageBus() {
         }
 
         case 'RESET_SETTINGS': {
+          await siteResources.clear();
           pacSync.resetRuntimeState();
           await storage.clear();
           pacKitchen.invalidateCache();

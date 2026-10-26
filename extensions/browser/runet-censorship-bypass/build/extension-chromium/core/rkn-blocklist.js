@@ -1,34 +1,34 @@
 'use strict';
 
+import { getRootDomain } from './utils.js';
+
 export const RKN_BLOCKLIST_URL = 'https://blocklist.rkn.gov.ru/';
 export const RKN_PREFILL_FRAGMENT_KEY = 'anticheburnet-search';
 
-export function normalizeRknLookupUrl(rawUrl) {
-  if (!rawUrl || typeof rawUrl !== 'string') return '';
+export function normalizeRknLookupDomain(rawValue) {
+  if (!rawValue || typeof rawValue !== 'string') return '';
 
   try {
-    const parsed = new URL(rawUrl.trim());
+    const value = rawValue.trim();
+    if (!value) return '';
+    const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+    const parsed = new URL(hasExplicitScheme ? value : `https://${value}`);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return '';
     }
 
-    // Credentials, query parameters and fragments are not required for a
-    // registry lookup and may contain sensitive data that must not be copied
-    // to a third-party form.
-    parsed.username = '';
-    parsed.password = '';
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.href;
+    const hostname = parsed.hostname.toLowerCase().replace(/^\.+|\.+$/g, '');
+    if (!hostname) return '';
+    return getRootDomain(hostname) || hostname;
   } catch {
     return '';
   }
 }
 
-export function buildRknBlocklistUrl(rawUrl) {
-  const lookupUrl = normalizeRknLookupUrl(rawUrl);
-  if (!lookupUrl) return RKN_BLOCKLIST_URL;
+export function buildRknBlocklistUrl(rawValue) {
+  const lookupDomain = normalizeRknLookupDomain(rawValue);
+  if (!lookupDomain) return RKN_BLOCKLIST_URL;
 
-  const fragment = `${RKN_PREFILL_FRAGMENT_KEY}=${encodeURIComponent(lookupUrl)}`;
+  const fragment = `${RKN_PREFILL_FRAGMENT_KEY}=${encodeURIComponent(lookupDomain)}`;
   return `${RKN_BLOCKLIST_URL}#${fragment}`;
 }

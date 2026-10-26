@@ -16,6 +16,7 @@ import {
 import { proxyBackend } from './proxy-backend.js';
 
 const STORAGE_KEY = 'antiCensorRu';
+const PAC_FRESHNESS_KEY = 'antiCensorPacFreshness';
 const ALARM_NAME = 'periodic-pac-update';
 const MAX_CUSTOM_PAC_BYTES = 10 * 1024 * 1024;
 const MAX_TRUSTED_PAC_BYTES = 25 * 1024 * 1024;
@@ -34,6 +35,10 @@ const getI18nMsg = (key, fallback) => {
   }
   return fallback;
 };
+
+const getPacSourceKey = (providerKey, customUrl = '') => providerKey === 'customPacUrl'
+  ? `${providerKey}:${String(customUrl || '').trim()}`
+  : String(providerKey || '');
 
 export const PAC_PROVIDERS = {
   Антизапрет: {
@@ -190,7 +195,10 @@ class PacSyncManager {
     if (this.isInitialized) {
       return;
     }
-    const saved = await storage.get(STORAGE_KEY, {});
+    const [saved, freshness] = await Promise.all([
+      storage.get(STORAGE_KEY, {}),
+      storage.get(PAC_FRESHNESS_KEY, null),
+    ]);
     if (saved && typeof saved === 'object') {
       if (saved.currentPacProviderKey !== undefined) {
         this.currentPacProviderKey = saved.currentPacProviderKey;
@@ -206,6 +214,25 @@ class PacSyncManager {
       }
       if (saved.rawPacData) {
         this.rawPacData = saved.rawPacData;
+      }
+    }
+
+    if (freshness && typeof freshness === 'object') {
+      const currentSourceKey = getPacSourceKey(this.currentPacProviderKey, this.customPacUrl);
+      if (freshness.sourceKey === currentSourceKey) {
+        const freshnessStamp = Number(freshness.lastPacUpdateStamp);
+        if (Number.isFinite(freshnessStamp) && freshnessStamp > this.lastPacUpdateStamp) {
+          this.lastPacUpdateStamp = freshnessStamp;
+        }
+      }
+      if (freshness.providerUpdateStamps && typeof freshness.providerUpdateStamps === 'object') {
+        for (const [key, value] of Object.entries(freshness.providerUpdateStamps)) {
+          if (!Object.prototype.hasOwnProperty.call(PAC_PROVIDERS, key)) continue;
+          const timestamp = Number(value);
+          if (Number.isFinite(timestamp) && timestamp > (this.providerUpdateStamps[key] || 0)) {
+            this.providerUpdateStamps[key] = timestamp;
+          }
+        }
       }
     }
 
@@ -399,6 +426,17 @@ class PacSyncManager {
       rawPacData: this.rawPacData,
     });
     this.updateTitle();
+  }
+
+  async persistFreshness({
+    lastPacUpdateStamp = this.lastPacUpdateStamp,
+    providerUpdateStamps = this.providerUpdateStamps,
+  } = {}) {
+    await storage.set(PAC_FRESHNESS_KEY, {
+      sourceKey: getPacSourceKey(this.currentPacProviderKey, this.customPacUrl),
+      lastPacUpdateStamp,
+      providerUpdateStamps: { ...providerUpdateStamps },
+    });
   }
 
   async downloadPacFromProvider(provider, customUrlCandidate = null) {
@@ -662,6 +700,33 @@ class PacSyncManager {
       const candidateRaw = await this.downloadPacFromProvider(provider, customUrl);
       if (generation !== this._syncGeneration) {
         throw new SyncSupersededError();
+      }
+
+      const requestedCustomUrl = key === 'customPacUrl'
+        ? String(customUrl || this.customPacUrl || '').trim()
+        : '';
+      const isSameSource = key === this.currentPacProviderKey && (
+        key !== 'customPacUrl' || requestedCustomUrl === String(this.customPacUrl || '').trim()
+      );
+      if (isSameSource && candidateRaw === this.rawPacData && this.isExpectedPacApplied) {
+        const now = Date.now();
+        const nextProviderUpdateStamps = {
+          ...this.providerUpdateStamps,
+          [key]: now,
+        };
+        await this.persistFreshness({
+          lastPacUpdateStamp: now,
+          providerUpdateStamps: nextProviderUpdateStamps,
+        });
+        this.lastPacUpdateStamp = now;
+        this.providerUpdateStamps = nextProviderUpdateStamps;
+        this.updateTitle();
+        console.log('[PAC Sync] PAC script is unchanged; keeping the active proxy configuration.');
+        logger.info('pac', `PAC-скрипт "${key}" уже актуален`, 'Повторное применение не требуется', {
+          provider: key,
+          lastPacUpdateStamp: now,
+        });
+        return;
       }
 
       console.log('[PAC Sync] Cooking and applying PAC script...');

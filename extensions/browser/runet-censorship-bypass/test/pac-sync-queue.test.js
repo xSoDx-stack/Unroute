@@ -193,6 +193,80 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
     expect(syncCount).to.equal(1);
   });
 
+  it('skips reapplying and rewriting an unchanged active PAC', async () => {
+    const pacData = 'function FindProxyForURL(url, host) { return "PROXY stable.example:443; DIRECT"; }';
+    pacSync.downloadPacFromProvider = async () => pacData;
+    await pacSync.syncWithPacProvider({ key: 'Антизапрет', ifUnattended: false });
+
+    let applyCalls = 0;
+    let fullStateWrites = 0;
+    let freshnessWrites = 0;
+    let freshnessState = null;
+    pacSync.applyPacData = async function(candidate, options) {
+      applyCalls++;
+      return originalApplyPacData.call(this, candidate, options);
+    };
+    storage.set = async (key, value) => {
+      if (key === 'antiCensorRu') fullStateWrites++;
+      if (key === 'antiCensorPacFreshness') {
+        freshnessWrites++;
+        freshnessState = value;
+      }
+      return originalStorageSet.call(storage, key, value);
+    };
+
+    await pacSync.syncWithPacProvider({ key: 'Антизапрет', ifUnattended: false });
+
+    expect(applyCalls).to.equal(0);
+    expect(fullStateWrites).to.equal(0);
+    expect(freshnessWrites).to.equal(1);
+    expect(freshnessState.sourceKey).to.equal('Антизапрет');
+    expect(freshnessState.lastPacUpdateStamp).to.equal(pacSync.lastPacUpdateStamp);
+  });
+
+  it('reapplies unchanged PAC data when the active proxy setting was lost', async () => {
+    const pacData = 'function FindProxyForURL(url, host) { return "PROXY restore.example:443; DIRECT"; }';
+    pacSync.downloadPacFromProvider = async () => pacData;
+    await pacSync.syncWithPacProvider({ key: 'Антизапрет', ifUnattended: false });
+
+    let applyCalls = 0;
+    pacSync.applyPacData = async function(candidate, options) {
+      applyCalls++;
+      return originalApplyPacData.call(this, candidate, options);
+    };
+    pacSync.isExpectedPacApplied = false;
+
+    await pacSync.syncWithPacProvider({ key: 'Антизапрет', ifUnattended: false });
+
+    expect(applyCalls).to.equal(1);
+    expect(pacSync.isExpectedPacApplied).to.equal(true);
+  });
+
+  it('restores newer lightweight freshness metadata for the active provider', async () => {
+    const pacData = 'function FindProxyForURL(url, host) { return "DIRECT"; }';
+    await originalStorageSet.call(storage, 'antiCensorRu', {
+      currentPacProviderKey: 'Антизапрет',
+      customPacUrl: '',
+      lastPacUpdateStamp: 100,
+      providerUpdateStamps: { 'Антизапрет': 100 },
+      rawPacData: pacData,
+    });
+    await originalStorageSet.call(storage, 'antiCensorPacFreshness', {
+      sourceKey: 'Антизапрет',
+      lastPacUpdateStamp: 200,
+      providerUpdateStamps: {
+        'Антизапрет': 200,
+        untrustedProvider: 999,
+      },
+    });
+
+    await pacSync.init();
+
+    expect(pacSync.lastPacUpdateStamp).to.equal(200);
+    expect(pacSync.providerUpdateStamps['Антизапрет']).to.equal(200);
+    expect(pacSync.providerUpdateStamps).to.not.have.property('untrustedProvider');
+  });
+
   it('4. Failed Sync A does not block pending Sync B, and queue remains fully operational', async () => {
     let syncACallback;
     const syncAPromise = new Promise((resolve) => {

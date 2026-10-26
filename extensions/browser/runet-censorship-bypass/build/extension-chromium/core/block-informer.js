@@ -136,6 +136,8 @@ class BlockInformer {
   }
 
   handleConnectionError(details) {
+    // Private browsing activity must never enter the persistent journal.
+    if (details?.incognito) return;
     const errStr = String(details?.error || '');
     // Browser error strings are internal and differ between engines. Use this
     // only as a best-effort diagnostic filter, never as a proxy health signal.
@@ -205,6 +207,9 @@ class BlockInformer {
   }
 
   async handleRequest(details, requestSucceeded = true) {
+    // Do not retain private hosts in shared tab statistics or session storage.
+    // Native PAC routing continues independently of this diagnostic listener.
+    if (details?.incognito) return;
     if (!details || typeof details.tabId !== 'number' || details.tabId < 0 || !details.url) {
       return;
     }
@@ -226,9 +231,37 @@ class BlockInformer {
       return;
     }
 
-    if (!appState.isInitialized) {
+    const isMainFrame = details.type === 'main_frame';
+    const proxyInfo = details.proxyInfo;
+    if (proxyInfo && String(proxyInfo.type || '').toLowerCase() === 'direct') {
+      if (requestSucceeded && isMainFrame) {
+        this.recordDirectRoute(details.tabId, hostname);
+      }
+      return;
+    }
+
+    // The same host can generate hundreds of resource events on one tab. Once
+    // it is known to be proxied, only a newly observed endpoint can change the
+    // badge. Main-frame requests still take the complete route-classification
+    // path so the persisted current-site route remains accurate.
+    const existingData = this.tabData.get(details.tabId);
+    if (!isMainFrame && existingData?.proxiedHosts.has(hostname)) {
+      let observedProxy = proxyEndpointFromInfo(proxyInfo);
+      if (!observedProxy && details.ip) {
+        const hostFromIp = ipToHost.get(details.ip);
+        if (hostFromIp && hostname !== details.ip && hostname !== hostFromIp.replace(/:\d+$/, '')) {
+          observedProxy = hostFromIp;
+        }
+      }
+      if (observedProxy && !existingData.proxies.has(observedProxy)) {
+        this.recordProxiedHost(details.tabId, hostname, observedProxy, false);
+      }
+      return;
+    }
+
+    if (!appState.isRequestStateInitialized) {
       try {
-        await appState.ensureInitialized();
+        await appState.ensureRequestStateInitialized();
       } catch {
         // Non-critical: continue with available state
       }
@@ -244,15 +277,6 @@ class BlockInformer {
       }
     } catch {
       // Non-critical: route detection can continue with browser event data.
-    }
-
-    const isMainFrame = details.type === 'main_frame';
-    const proxyInfo = details.proxyInfo;
-    if (proxyInfo && String(proxyInfo.type || '').toLowerCase() === 'direct') {
-      if (requestSucceeded && isMainFrame) {
-        this.recordDirectRoute(details.tabId, hostname);
-      }
-      return;
     }
 
     let proxyHost = proxyEndpointFromInfo(proxyInfo);
@@ -280,7 +304,7 @@ class BlockInformer {
     // B. Check domain matching against PAC Kitchen user exceptions
     if (!proxyHost) {
       try {
-        if (mods && mods.exceptions && Object.keys(mods.exceptions).length > 0) {
+        if (mods && mods.exceptions) {
           const match = matchExceptionDomain(hostname, mods.exceptions);
           if (match && match.matched && match.isProxied) {
             proxyHost = (mods.filteredCustomsString || '').split(';')[0].trim();
@@ -384,19 +408,34 @@ class BlockInformer {
     const data = this._getOrCreateTabData(tabId);
     if (!data) return;
 
+    const normalizedProxyHost = normalizeProxyEndpoint(proxyHost);
+    const previousRoute = data.mainFrameRoute;
+    const mainFrameChanged = Boolean(isMainFrame && (
+      !data.hasMainFrame ||
+      !previousRoute ||
+      previousRoute.kind !== 'proxy' ||
+      previousRoute.source !== source ||
+      previousRoute.hostname !== hostname ||
+      previousRoute.proxyHost !== normalizedProxyHost ||
+      previousRoute.confidence !== confidence
+    ));
     if (isMainFrame) {
       data.hasMainFrame = true;
       data.mainFrameRoute = {
         kind: 'proxy',
         source,
         hostname,
-        proxyHost: normalizeProxyEndpoint(proxyHost),
+        proxyHost: normalizedProxyHost,
         confidence,
         observedAt: Date.now(),
       };
-      this._persistRoute(tabId, data.mainFrameRoute);
+      if (mainFrameChanged) {
+        this._persistRoute(tabId, data.mainFrameRoute);
+      }
     }
 
+    const shouldSetBadgeColor = data.proxiedHosts.size === 0;
+    const hostChanged = !data.proxiedHosts.has(hostname);
     if (data.proxiedHosts.size >= MAX_PROXIED_HOSTS_PER_TAB && !data.proxiedHosts.has(hostname)) {
       const oldestHost = data.proxiedHosts.values().next().value;
       if (oldestHost !== undefined) {
@@ -405,13 +444,20 @@ class BlockInformer {
     }
     data.proxiedHosts.add(hostname);
 
-    if (data.proxies.size >= MAX_PROXIES_PER_TAB && !data.proxies.has(proxyHost)) {
+    const proxyChanged = Boolean(proxyHost && !data.proxies.has(proxyHost));
+    if (proxyHost && data.proxies.size >= MAX_PROXIES_PER_TAB && !data.proxies.has(proxyHost)) {
       const oldestProxy = data.proxies.values().next().value;
       if (oldestProxy !== undefined) {
         data.proxies.delete(oldestProxy);
       }
     }
-    data.proxies.add(proxyHost);
+    if (proxyHost) {
+      data.proxies.add(proxyHost);
+    }
+
+    if (!hostChanged && !proxyChanged && !mainFrameChanged) {
+      return;
+    }
 
     const count = data.proxiedHosts.size;
     const badgeText = data.hasMainFrame ? String(count) : `%${count}`;
@@ -425,7 +471,7 @@ class BlockInformer {
     }
 
     try {
-      if (chrome.action.setBadgeBackgroundColor) {
+      if (shouldSetBadgeColor && chrome.action.setBadgeBackgroundColor) {
         chrome.action.setBadgeBackgroundColor({
           tabId,
           color: '#db4b2f',

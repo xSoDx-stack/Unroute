@@ -301,7 +301,9 @@ export function cookPac(pacData, pacMods) {
   const originalFindProxyForURL = typeof FindProxyForURL === 'function'
     ? FindProxyForURL
     : function() { return ${JSON.stringify(missingOriginalFallback)}; };
+  let explicitDirect = false;
   let tmp = function(url, host) {
+    explicitDirect = false;
 `;
 
   if (pacMods.ifMindWhitelist) {
@@ -454,9 +456,11 @@ export function cookPac(pacData, pacMods) {
 
     // 1. Direct hostname exact or wildcard match
     if (excExact[host] !== undefined) {
+      explicitDirect = excExact[host] === 0;
       return excExact[host] === 1 ? getCustomProxiedDestination(url, host) : "DIRECT";
     }
     if (excWild[host] !== undefined) {
+      explicitDirect = excWild[host] === 0;
       return excWild[host] === 1 ? getCustomProxiedDestination(url, host) : "DIRECT";
     }
 
@@ -465,9 +469,11 @@ export function cookPac(pacData, pacMods) {
     for (let pIdx = 1; pIdx < hostParts.length; pIdx++) {
       const parentDomain = hostParts.slice(pIdx).join('.');
       if (excWild[parentDomain] !== undefined) {
+        explicitDirect = excWild[parentDomain] === 0;
         return excWild[parentDomain] === 1 ? getCustomProxiedDestination(url, host) : "DIRECT";
       }
       if (excExact[parentDomain] !== undefined) {
+        explicitDirect = excExact[parentDomain] === 0;
         return excExact[parentDomain] === 1 ? getCustomProxiedDestination(url, host) : "DIRECT";
       }
     }
@@ -505,6 +511,7 @@ export function cookPac(pacData, pacMods) {
   const oldTmp = tmp;
   tmp = function(url, host) {
     const res = oldTmp.call(this, url, host);
+    if (explicitDirect) return res;
     if (typeof res !== 'string') return res;
     return res.replace(/(;|^)\\s*DIRECT\\s*(?=;|$)/g, function(match, p1) {
       return (p1 ? p1 + " " : "") + directReplacement;

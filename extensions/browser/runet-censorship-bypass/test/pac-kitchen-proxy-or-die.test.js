@@ -60,6 +60,17 @@ function FindProxyForURL(url, host) {
     return sandbox.FindProxyForURL;
   }
 
+  it('keeps explicit DIRECT exceptions direct even with a global DIRECT replacement', () => {
+    const [error, mods] = createPacModifiers({
+      exceptions: { 'example.com': false },
+      replaceDirectWith: 'HTTPS replacement.example:443',
+    });
+    expect(error).to.equal(null);
+    const findProxy = evaluateCookedPac(cookPac(basePac, mods));
+    expect(findProxy('https://sub.example.com/a', 'sub.example.com')).to.equal('DIRECT');
+    expect(findProxy('https://unrelated.test/', 'unrelated.test')).to.include('replacement.example');
+  });
+
   it('Manual Proxy rule + ProxyOrDie ON should return CUSTOM_PROXY with NO direct fallback', () => {
     const mods = {
       ifMindExceptions: true,
