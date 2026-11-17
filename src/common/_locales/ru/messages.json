@@ -1,0 +1,2761 @@
+{
+  "dlErrorInvalid": {"message": "Некорректные данные листа. Проверьте название, домены и порядок листов."},
+  "dlErrorUnknown": {"message": "Лист больше не существует. Обновите данные и повторите действие."},
+  "dlBack": {"message": "← Сайты"},
+  "dlManual": {"message": "Ручные правила"},
+  "dlAdd": {"message": "Добавить лист"},
+  "dlImport": {"message": "Новый лист из .txt"},
+  "dlName": {"message": "Название листа"},
+  "dlProxy": {"message": "Прокси для всего листа"},
+  "dlFile": {"message": "Домены и wildcard, UTF-8 .txt"},
+  "dlCreate": {"message": "Создать лист"},
+  "dlCancel": {"message": "Отмена"},
+  "dlConfirm": {"message": "Подтвердить"},
+  "dlPac": {"message": "По PAC"},
+  "dlDeleteSelected": {"message": "Удалить выбранные"},
+  "dlLimit": {"message": "Не более 100 000 доменов; файл до 5 МБ."},
+  "dlFileType": {"message": "Выберите текстовый файл UTF-8 (.txt), не более 5 МБ."},
+  "dlEmptyImport": {"message": "Нет корректных доменов. Существующие данные не изменены."},
+  "dlPreview": {"message": "Доменов: $1 · некорректных строк: $2. URL преобразуются в домены, пути не учитываются."},
+  "dlMissing": {"message": "Прокси недоступен: $1"},
+  "dlLoadError": {"message": "Не удалось обновить данные. Черновик сохранён; повторите загрузку."},
+  "dlPriority": {"message": "Приоритет сверху вниз: первый включённый лист с совпадением. Выключенные листы пропускаются."},
+  "dlProxyFor": {"message": "Прокси для листа $1"},
+  "dlEnabledFor": {"message": "Включить лист $1"},
+  "dlUp": {"message": "Выше"},
+  "dlDown": {"message": "Ниже"},
+  "dlRename": {"message": "Переименовать"},
+  "dlDelete": {"message": "Удалить"},
+  "dlDeleteTitle": {"message": "Удалить лист «$1»?"},
+  "dlDeleteHint": {"message": "Домены других листов и ручные правила сохранятся."},
+  "dlEmpty": {"message": "Листов пока нет. Добавьте пустой лист или загрузите .txt."},
+  "dlNameError": {"message": "Название: от 1 до 64 символов."},
+  "dlReplace": {"message": "Заменить домены этого листа?"},
+  "dlRawHelp": {"message": "Один домен или wildcard на строку. URL преобразуются в домены; пути не учитываются."},
+  "mpNoTargets": {"message": "Нет доступных прокси"},
+  "mpErrorName": {"message": "Введите уникальное название из 1–32 символов. Имена Tor и Cloudflare WARP зарезервированы."},
+  "mpErrorAuth": {"message": "У прокси с одинаковым адресом и портом не могут быть разные данные авторизации."},
+  "mpErrorBuiltin": {"message": "Встроенные прокси нельзя переименовывать или удалять."},
+  "mpErrorReference": {"message": "Прокси не найден или его привязка некорректна. Обновите данные и переназначьте сайты."},
+  "mpErrorUnavailable": {"message": "Выберите включённый прокси, разрешённый текущими ограничениями."},
+  "mpErrorReplacement": {"message": "Перед удалением выберите прокси для переноса привязанных сайтов и настройки по умолчанию."},
+  "mpErrorConflict": {"message": "Список изменён или устарел. Обновите данные и повторите действие; черновик сохранён."},
+  "mpErrorChoice": {"message": "Выберите прокси для новых сайтов."},
+  "mpErrorRules": {"message": "Некорректный список изменений сайтов. Проверьте домены и режимы."},
+  "mpErrorMissingRule": {"message": "Один из сайтов больше не находится в списке проксируемых. Обновите список."},
+  "mpRename": {"message": "Переименовать"},
+  "mpReadbackFailed": {"message": "Сохранено · обновите данные"},
+  "mpDeleteReplace": {"message": "Удалить прокси · перенести сайты на"},
+  "mpChooseReplacement": {"message": "Выберите замену явно"},
+  "mpCancel": {"message": "Отмена"},
+  "mpAllProxies": {"message": "Все прокси"},
+  "mpSelectAll": {"message": "Все найденные"},
+  "mpLegacy": {"message": "Общая цепочка (без назначения)"},
+  "mpRawConflict": {"message": "Текст сохранён в черновике. Обновите данные и повторите сохранение."},
+  "mpSelectDomain": {"message": "Выбрать $param_1$", "placeholders": {"param_1": {"content": "$1"}}},
+  "mpDomainTarget": {"message": "Прокси для $param_1$", "placeholders": {"param_1": {"content": "$1"}}},
+  "mpMissingProxy": {"message": "Прокси недоступен"},
+  "popupResourceProxyScope": {"message": "Ручные исключения для этого домена действуют во всех вкладках."},
+  "popupResourceRulesDisabled": {"message": "Правила сайтов отключены. Включите их в настройках, чтобы назначать прокси ресурсам."},
+  "popupSiteProxyHelp": {"message": "Выберите подключение сайта. Автоматические ресурсы используют отдельную настройку ниже; ручные исключения сохраняются."},
+  "popupSiteConnection": {"message": "Подключение сайта"},
+  "popupExtensionStatusHelp": {"message": "Состояние расширения. Подключение сайта выбирается ниже."},
+  "popupSiteAutomatic": {"message": "Автоматически — по PAC"},
+  "popupSiteProxyChoice": {"message": "Прокси: $param_1$", "placeholders": {"param_1": {"content": "$1"}}},
+  "popupWithoutProxy": {"message": "Без прокси"},
+  "popupResourceAutoChoice": {"message": "Автоматически"},
+  "popupConfiguredRoute": {"message": "Настроено: $param_1$", "placeholders": {"param_1": {"content": "$1"}}},
+  "popupManualExceptionsKeep": {"message": "Ручные исключения сохраняются."},
+  "popupChangesSaved": {"message": "Изменения сохранены"},
+  "popupReloadLabel": {"message": "Перезагрузить текущий сайт"},
+  "popupReloadShort": {"message": "Перезагрузить"},
+  "popupResourceRouteLabel": {"message": "Маршрут для $param_1$", "placeholders": {"param_1": {"content": "$1"}}},
+  "popupResourcesLabel": {"message": "Автоматические ресурсы"},
+  "popupResourcesFollow": {"message": "Как у сайта"},
+  "popupResourceManual": {"message": "Ручное правило $param_1$. Не меняется вместе с сайтом.", "placeholders": {"param_1": {"content": "$1"}}},
+  "popupResourceAutomatic": {"message": "Следует общей настройке ресурсов сайта."},
+  "popupResourceMain": {"message": "Основной домен: его запросы используют маршрут сайта."},
+  "popupResourceOtherAuto": {"message": "Автоматическое глобальное правило ресурса другого сайта."},
+  "popupResourcePac": {"message": "Маршрут определяет PAC; отдельного ручного правила ресурса нет."},
+  "popupResourceReset": {"message": "Убрать исключение"},
+  "popupResourceResetHelp": {"message": "Удаляется только ручное правило этого точного домена. Оставшиеся wildcard-правила сохраняются; иначе действует настройка ресурсов сайта."},
+  "popupResourceResetSaved": {"message": "Точное правило сброшено. Перезагрузите сайт, чтобы обновить соединения."},
+  "popupResourceInheritanceHelp": {"message": "«Как у сайта»: автоматические ресурсы наследуют маршрут основного домена. «Без прокси»: идут напрямую. Ручные исключения сохраняются."},
+  "popupResourceInheritanceOff": {"message": "Автоматические ресурсы идут напрямую. Ручные правила ресурсов сохраняются."},
+  "popupResourceInheritanceUnavailable": {"message": "Доступно с собственным прокси, Tor или WARP в обычной вкладке."},
+  "popupResourceInheritanceSaved": {"message": "Настройка ресурсов сохранена. Перезагрузите сайт, чтобы обновить соединения."},
+  "popupResourceInheritanceChromiumScope": {"message": "В Chromium настройка применяется к обнаруженным доменам ресурсов. Первый запрос к неизвестному домену обрабатывается PAC. После изменения перезагрузите сайт."},
+  "popupResourceInheritanceDomainScope": {"message": "Запросы к самому домену сайта используют его маршрут: отделить их от основного домена нельзя."},
+  "popupLegacyProxyList": {"message": "Общий список прокси"},
+  "popupLegacyProxyHelp": {"message": "Правило без привязки к конкретному прокси: используется общий список прокси, а не прямое соединение."},
+  "mpSelectionCount": {"message": "Выбрано: $param_1$ · найдено: $param_2$", "placeholders": {"param_1": {"content": "$1"}, "param_2": {"content": "$2"}}},
+  "mpClearRules": {"message": "Удалить правила текущего списка ($param_1$)?", "placeholders": {"param_1": {"content": "$1"}}},
+  "mpImportCounts": {"message": "Добавлено: $param_1$ · изменено: $param_2$ · без изменений: $param_3$ · пропущено строк: $param_4$", "placeholders": {"param_1": {"content": "$1"}, "param_2": {"content": "$2"}, "param_3": {"content": "$3"}, "param_4": {"content": "$4"}}},
+  "mpNewTarget": {"message": "Прокси для новых сайтов и импорта"},
+  "mpProxyFilter": {"message": "Фильтр по прокси"},
+  "mpMoveTarget": {"message": "Перенести на прокси"},
+  "mpMoveSelected": {"message": "Перенести выбранные"},
+  "mpClearSelection": {"message": "Снять выбор"},
+  "mpReloadRetry": {"message": "Обновить и повторить сохранение"},
+  "mpDefaultTarget": {"message": "По умолчанию для новых сайтов"},
+  "mpOptionalName": {"message": "Название (необязательно)"},
+  "fidelity_connection": {"message": "Подключение"},
+  "fidelity_settings": {"message": "Настройки"},
+
+  "fidelity_enabled": {"message": "Включено"},
+  "fidelity_route_pac": {"message": "Маршрут выбирает PAC"},
+  "fidelity_route_proxy": {"message": "Сайт — через прокси"},
+  "fidelity_route_direct": {"message": "Сайт — напрямую"},
+  "fidelity_route_resources_proxy": {"message": "Сайт и ресурсы — через прокси"},
+  "fidelity_route_resources_direct": {"message": "Сайт и ресурсы — напрямую"},
+  "fidelity_logs": {"message": "Журнал"},
+  "fidelity_check": {"message": "Проверка"},
+  "fidelity_information": {"message": "Информация"},
+  "fidelity_history": {"message": "История"},
+  "fidelity_connection_intro": {"message": "Выберите, кто определяет маршрут для сайтов."},
+  "fidelity_rule_source": {"message": "Источник правил"},
+  "fidelity_default": {"message": "По умолчанию"},
+  "fidelity_update_pac": {"message": "Обновить PAC"},
+  "fidelity_pac_explainer": {"message": "PAC выбирает маршрут. Он не шифрует соединение и не заменяет VPN."},
+  "fidelity_sites": {"message": "Сайты"},
+  "fidelity_msg_import_txt_47bf575c": {"message": "Загрузить .txt"},
+  "fidelity_msg_export_txt_18f7f499": {"message": "Экспорт .txt"},
+  "fidelity_msg_text_mode_e918f67f": {"message": "Текстовый режим"},
+  "fidelity_msg_via_proxy_aadb9e20": {"message": "Через прокси ("},
+  "fidelity_msg_direct_1281e826": {"message": "Напрямую ("},
+  "fidelity_msg_allowlist_9a20a69f": {"message": "Белый список ("},
+  "fidelity_search_sites": {"message": "Поиск по списку…"},
+  "fidelity_msg_clear_list_a08cbf31": {"message": "Очистить список"},
+  "fidelity_proxies": {"message": "Прокси"},
+  "fidelity_options": {"message": "Опции"},
+
+  "fidelity_footer_hint": {"message": "Изменения применяются автоматически"},
+  "appearance_title": {"message": "Оформление"},
+  "appearance_description": {"message": "Настройки сохраняются автоматически только в этом браузере."},
+  "appearance_theme": {"message": "Тема"},
+  "appearance_theme_system": {"message": "Как в системе"},
+  "appearance_theme_light": {"message": "Светлая"},
+  "appearance_theme_dark": {"message": "Тёмная"},
+  "appearance_accent": {"message": "Акцентный цвет"},
+  "appearance_accent_mint": {"message": "Мятный"},
+  "appearance_accent_blue": {"message": "Голубой"},
+  "appearance_accent_sage": {"message": "Шалфей"},
+  "appearance_accent_custom": {"message": "Свой цвет"},
+  "appearance_color_picker": {"message": "Выбрать свой цвет"},
+  "appearance_custom_hex": {"message": "Цвет в формате HEX"},
+  "appearance_contrast_hint": {"message": "Контраст текста и фокуса подбирается автоматически. Значок Unroute остаётся мятным."},
+  "appearance_invalid_hex": {"message": "Введите цвет в формате #RGB или #RRGGBB."},
+  "appearance_retry": {"message": "Повторить сохранение"},
+  "appearance_load_error": {"message": "Не удалось загрузить оформление. Используются настройки по умолчанию: "},
+  "appearance_save_error": {"message": "Не удалось сохранить оформление: "},
+  "appearance_saving": {"message": "Сохранение…"},
+  "appearance_saved": {"message": "Сохранено"},
+  "appearance_loading": {"message": "Загрузка…"},
+  "extName": {
+    "message": "Unroute"
+  },
+  "extDesc": {
+    "message": "PAC-расширение для выборочного доступа через прокси в Chromium и Firefox"
+  },
+  "Antizapret": {
+    "message": "Антизапрет"
+  },
+  "Anticensority": {
+    "message": "Антицензорити"
+  },
+  "msg_unroute_494f900b": {
+    "message": "Unroute",
+    "description": "User-visible text. Source: Unroute"
+  },
+  "msg_an_individual_proxy_request_failed_this_does__b7a768af": {
+    "message": "Не удалось выполнить отдельный запрос через прокси. Это не означает, что прокси-сервер недоступен целиком.",
+    "description": "User-visible text. Source: Не удалось выполнить отдельный запрос через прокси. Это не означает, что прокси-сервер недоступен целиком."
+  },
+  "msg_open_with_google_translate_5c98f6aa": {
+    "message": "Через Google Translate",
+    "description": "User-visible text. Source: Через Google Translate"
+  },
+  "msg_the_domain_must_be_a_string_3e214b59": {
+    "message": "Домен должен быть строкой",
+    "description": "User-visible text. Source: Домен должен быть строкой"
+  },
+  "msg_enter_a_domain_56988bdc": {
+    "message": "Введите домен",
+    "description": "User-visible text. Source: Введите домен"
+  },
+  "msg_the_domain_must_not_contain_a_username_or_pas_12188e49": {
+    "message": "Домен не должен содержать логин или пароль",
+    "description": "User-visible text. Source: Домен не должен содержать логин или пароль"
+  },
+  "msg_invalid_domain_5dc91a45": {
+    "message": "Некорректный домен",
+    "description": "User-visible text. Source: Некорректный домен"
+  },
+  "msg_invalid_domain_or_ip_address_87a58d07": {
+    "message": "Некорректный домен или IP-адрес",
+    "description": "User-visible text. Source: Некорректный домен или IP-адрес"
+  },
+  "msg_another_extension_with_higher_priority_has_ta_1eaed9f7": {
+    "message": "Настройки прокси перехвачены другим расширением с более высоким приоритетом.",
+    "description": "User-visible text. Source: Настройки прокси перехвачены другим расширением с более высоким приоритетом."
+  },
+  "msg_proxy_settings_are_locked_by_browser_policy_o_73ef93ce": {
+    "message": "Настройки прокси заблокированы политикой или параметрами браузера.",
+    "description": "User-visible text. Source: Настройки прокси заблокированы политикой или параметрами браузера."
+  },
+  "msg_the_extension_cannot_control_proxy_settings_b5feb167": {
+    "message": "Расширение не может управлять настройками прокси.",
+    "description": "User-visible text. Source: Расширение не может управлять настройками прокси."
+  },
+  "msg_unknown_error_2d55ddef": {
+    "message": "Неизвестная ошибка",
+    "description": "User-visible text. Source: Неизвестная ошибка"
+  },
+  "msg_unhandled_promise_rejection_9d88667c": {
+    "message": "Необработанная ошибка Promise",
+    "description": "User-visible text. Source: Необработанная ошибка Promise"
+  },
+  "msg_pac_proxy_error_7dd6d59c": {
+    "message": "Ошибка PAC / Proxy",
+    "description": "User-visible text. Source: Ошибка PAC / Proxy"
+  },
+  "msg_the_browser_reported_an_error_in_the_pac_scri_da596bbd": {
+    "message": "Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении",
+    "description": "User-visible text. Source: Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении"
+  },
+  "msg_pac_script_proxy_error_bbf4ab9f": {
+    "message": "Ошибка PAC-скрипта / Прокси",
+    "description": "User-visible text. Source: Ошибка PAC-скрипта / Прокси"
+  },
+  "msg_the_proxy_server_reported_an_error_a84dd4de": {
+    "message": "Прокси-сервер сообщил об ошибке",
+    "description": "User-visible text. Source: Прокси-сервер сообщил об ошибке"
+  },
+  "msg_unexpected_extension_error_7188d268": {
+    "message": "Непредвиденная ошибка расширения",
+    "description": "User-visible text. Source: Непредвиденная ошибка расширения"
+  },
+  "msg_extension_error_6ed6d859": {
+    "message": "Ошибка расширения",
+    "description": "User-visible text. Source: Ошибка расширения"
+  },
+  "msg_lost_control_of_proxy_settings_bbe730b5": {
+    "message": "Утерян контроль настроек прокси",
+    "description": "User-visible text. Source: Утерян контроль настроек прокси"
+  },
+  "msg_lost_proxy_control_425ac1cb": {
+    "message": "Утерян контроль прокси",
+    "description": "User-visible text. Source: Утерян контроль прокси"
+  },
+  "msg_there_is_a_network_problem_check_your_connect_855d914d": {
+    "message": "Что-то не так с сетью, проверьте соединение.",
+    "description": "User-visible text. Source: Что-то не так с сетью, проверьте соединение."
+  },
+  "msg_the_server_response_contains_invalid_utf_8_da_cd4f45e9": {
+    "message": "Ответ сервера содержит некорректные данные UTF-8.",
+    "description": "User-visible text. Source: Ответ сервера содержит некорректные данные UTF-8."
+  },
+  "msg_the_final_response_url_failed_the_security_ch_08b72652": {
+    "message": "Конечный адрес ответа не прошёл проверку безопасности.",
+    "description": "User-visible text. Source: Конечный адрес ответа не прошёл проверку безопасности."
+  },
+  "msg_the_server_returned_http_status_sub_5cbb75ba": {
+    "message": "Получен ответ с неудачным HTTP-кодом $param_1$.",
+    "description": "User-visible text. Source: Получен ответ с неудачным HTTP-кодом $SUB$.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_connection_to_the_server_timed_out_32c34e3b": {
+    "message": "Таймаут соединения с сервером.",
+    "description": "User-visible text. Source: Таймаут соединения с сервером."
+  },
+  "msg_sub_mb_cfea5b03": {
+    "message": "$param_1$ МБ",
+    "description": "User-visible text. Source: $SUB$ МБ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_sub_kb_870dff5f": {
+    "message": "$param_1$ КБ",
+    "description": "User-visible text. Source: $SUB$ КБ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_response_exceeds_the_size_limit_sub_77874048": {
+    "message": "Размер ответа превышает допустимый лимит ($param_1$).",
+    "description": "User-visible text. Source: Размер ответа превышает допустимый лимит ($SUB$).",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_local_tor_d95e42e8": {
+    "message": "Локальный Tor",
+    "description": "User-visible text. Source: Локальный Tor"
+  },
+  "msg_local_cloudflare_warp_6d7e99e7": {
+    "message": "Локальный Cloudflare WARP",
+    "description": "User-visible text. Source: Локальный Cloudflare WARP"
+  },
+  "msg_unknown_local_proxy_service_0e509c02": {
+    "message": "Неизвестная локальная прокси-служба",
+    "description": "User-visible text. Source: Неизвестная локальная прокси-служба"
+  },
+  "msg_no_proxy_check_handler_is_configured_af3d09aa": {
+    "message": "Не задан обработчик проверки прокси",
+    "description": "User-visible text. Source: Не задан обработчик проверки прокси"
+  },
+  "msg_sub_was_not_detected_start_the_service_and_tr_b388a19d": {
+    "message": "$param_1$ не обнаружен. Запустите службу и повторите попытку.",
+    "description": "User-visible text. Source: $SUB$ не обнаружен. Запустите службу и повторите попытку.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_repeated_sub_b45a9140": {
+    "message": "Повторено: $param_1$",
+    "description": "User-visible text. Source: Повторено: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_error_log_is_empty_fc25b18e": {
+    "message": "# Журнал ошибок и сбоев пуст.\n",
+    "description": "User-visible text. Source: # Журнал ошибок и сбоев пуст. "
+  },
+  "msg_unroute_error_report_1566112b": {
+    "message": " Отчёт об ошибках и сбоях расширения «Unroute»\n",
+    "description": "User-visible text. Source:  Отчет об ошибках и сбоях расширения «Unroute» "
+  },
+  "msg_exported_sub_7272ca57": {
+    "message": " Дата выгрузки: $param_1$\n",
+    "description": "User-visible text. Source:  Дата выгрузки: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_total_entries_sub_8989df5a": {
+    "message": " Всего записей в отчете: $param_1$\n",
+    "description": "User-visible text. Source:  Всего записей в отчете: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_repeated_sub_times_0ea8e23d": {
+    "message": " (число повторений: $param_1$)",
+    "description": "User-visible text. Source:  (повторено $SUB$ раз)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_title_sub_e7ebd829": {
+    "message": "  Заголовок: $param_1$\n",
+    "description": "User-visible text. Source:  Заголовок: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_message_sub_6f3fc7d3": {
+    "message": "  Сообщение: $param_1$\n",
+    "description": "User-visible text. Source:  Сообщение: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_details_sub_2074c648": {
+    "message": "  Детали: $param_1$\n",
+    "description": "User-visible text. Source:  Детали: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_operation_was_cancelled_by_a_settings_res_5072fc6c": {
+    "message": "Операция отменена из-за сброса настроек",
+    "description": "User-visible text. Source: Операция отменена из-за сброса настроек"
+  },
+  "msg_settings_are_being_reset_please_wait_4d08e3d1": {
+    "message": "Выполняется сброс настроек. Дождитесь завершения.",
+    "description": "User-visible text. Source: Выполняется сброс настроек. Дождитесь завершения."
+  },
+  "msg_the_site_tab_was_not_found_3a836d67": {
+    "message": "Не найдена вкладка сайта",
+    "description": "User-visible text. Source: Не найдена вкладка сайта"
+  },
+  "msg_no_domain_was_provided_for_the_site_rule_cb6d5c38": {
+    "message": "Не указан домен для правила сайта",
+    "description": "User-visible text. Source: Не указан домен для правила сайта"
+  },
+  "msg_this_setting_is_only_available_in_firefox_9a4f6560": {
+    "message": "Эта настройка доступна только в Firefox",
+    "description": "User-visible text. Source: Эта настройка доступна только в Firefox"
+  },
+  "msg_connection_failed_4b7c43eb": {
+    "message": "Сбой соединения",
+    "description": "User-visible text. Source: Сбой соединения"
+  },
+  "msg_settings_are_being_reset_3089ff9b": {
+    "message": "Выполняется сброс настроек",
+    "description": "User-visible text. Source: Выполняется сброс настроек"
+  },
+  "msg_settings_are_being_reset_try_changing_this_ag_31c856be": {
+    "message": "Выполняется сброс настроек. Повторите изменение после завершения.",
+    "description": "User-visible text. Source: Выполняется сброс настроек. Повторите изменение после завершения."
+  },
+  "msg_only_proxy_sites_that_use_https_encryption_th_e1bf0a1c": {
+    "message": "Проксировать только сайты, доступные по шифрованному протоколу HTTPS. Прокси и провайдер смогут видеть только адреса проксируемых HTTPS-сайтов, но не их содержимое.",
+    "description": "User-visible text. Source: Проксировать только сайты, доступные по шифрованному протоколу HTTPS. Прокси и провайдер смогут видеть только адреса про"
+  },
+  "msg_encrypted_proxy_connections_only_b1fdf1e7": {
+    "message": "только шифрованная связь с прокси",
+    "description": "User-visible text. Source: только шифрованная связь с прокси"
+  },
+  "msg_encrypt_the_connection_to_the_proxy_using_htt_0f438fda": {
+    "message": "Шифровать соединение до прокси от провайдера, используя только прокси типа HTTPS или локальный Tor.",
+    "description": "User-visible text. Source: Шифровать соединение до прокси от провайдера, используя только прокси типа HTTPS или локальный Tor."
+  },
+  "msg_disable_ip_dns_lookup_1bdeeeef": {
+    "message": "запретить определение по IP/DNS",
+    "description": "User-visible text. Source: запретить определение по IP/DNS"
+  },
+  "msg_prevent_the_pac_script_from_using_dns_to_chec_7d11c748": {
+    "message": "Запрещает скрипту использовать DNS в браузере для проверки IP-адресов.",
+    "description": "User-visible text. Source: Запрещает скрипту использовать DNS в браузере для проверки IP-адресов."
+  },
+  "msg_proxy_or_fail_d2da522e": {
+    "message": "проксируй или умри!",
+    "description": "User-visible text. Source: проксируй или умри!"
+  },
+  "msg_prevent_direct_connections_when_the_proxy_fai_3300e70c": {
+    "message": "Запрещает прямое соединение без прокси в случаях, когда прокси отказывает.",
+    "description": "User-visible text. Source: Запрещает прямое соединение без прокси в случаях, когда прокси отказывает."
+  },
+  "msg_use_pac_script_proxies_e9b3b8f2": {
+    "message": "использовать прокси PAC-скрипта",
+    "description": "User-visible text. Source: использовать прокси PAC-скрипта"
+  },
+  "msg_use_the_official_proxy_servers_provided_by_th_ab2ec876": {
+    "message": "Использовать официальные прокси-серверы от авторов PAC-скрипта.",
+    "description": "User-visible text. Source: Использовать официальные прокси-сервера от авторов PAC-скрипта."
+  },
+  "msg_use_your_local_tor_49b28b01": {
+    "message": "использовать СВОЙ локальный Tor",
+    "description": "User-visible text. Source: использовать СВОЙ локальный Tor"
+  },
+  "msg_use_a_locally_installed_tor_service_socks5_12_c820e89f": {
+    "message": "Использовать локально установленный Tor (SOCKS5 127.0.0.1:9150 / 9050) в качестве прокси.",
+    "description": "User-visible text. Source: Использовать локально установленный Tor (SOCKS5 127.0.0.1:9150 / 9050) в качестве прокси."
+  },
+  "msg_use_warp_as_a_proxy_36badc89": {
+    "message": "использовать WARP как прокси",
+    "description": "User-visible text. Source: использовать WARP как прокси"
+  },
+  "msg_use_local_cloudflare_warp_socks5_https_localh_fbed5863": {
+    "message": "Использовать локальный Cloudflare WARP (SOCKS5 / HTTPS localhost:40000).",
+    "description": "User-visible text. Source: Использовать локальный Cloudflare WARP (SOCKS5 / HTTPS localhost:40000)."
+  },
+  "msg_use_site_exceptions_488925bf": {
+    "message": "учитывать исключения",
+    "description": "User-visible text. Source: учитывать исключения"
+  },
+  "msg_apply_manually_added_sites_from_the_proxy_and_46d716c9": {
+    "message": "Учитывать сайты, добавленные вручную (списки включений и исключений).",
+    "description": "User-visible text. Source: Учитывать сайты, добавленные вручную (списки включений и исключений)."
+  },
+  "msg_limit_routing_to_the_allowlist_8078c546": {
+    "message": "Ограничиться только белым списком",
+    "description": "User-visible text. Source: Ограничиться только белым списком"
+  },
+  "msg_allow_the_extension_to_operate_only_on_allowl_42641c87": {
+    "message": "Разрешить расширению работать только с адресами из белого списка.",
+    "description": "User-visible text. Source: Разрешить расширению работать только с адресами из белого списка."
+  },
+  "msg_use_your_proxies_only_for_your_sites_f18edc5b": {
+    "message": "использовать СВОИ прокси только для СВОИХ сайтов",
+    "description": "User-visible text. Source: использовать СВОИ прокси только для СВОИХ сайтов"
+  },
+  "msg_use_your_proxies_only_for_sites_added_manuall_65e0122a": {
+    "message": "Использовать свои прокси только для сайтов, добавленных в список вручную.",
+    "description": "User-visible text. Source: Использовать свои прокси только для сайтов, добавленных в список вручную."
+  },
+  "msg_also_proxy_onion_i2p_and_opennic_8d72d0f5": {
+    "message": "проксировать также .onion, .i2p, OpenNIC",
+    "description": "User-visible text. Source: проксировать также .onion, .i2p, OpenNIC"
+  },
+  "msg_proxy_sites_in_alternative_networks_opennic_e_8a99efb5": {
+    "message": "Проксировать сайты в зонах альтернативных сетей (OpenNIC, EmerCoin, I2P, Tor).",
+    "description": "User-visible text. Source: Проксировать сайты в зонах альтернативных сетей (OpenNIC, EmerCoin, I2P, Tor)."
+  },
+  "msg_replace_direct_with_5c6a9020": {
+    "message": "заменить DIRECT на",
+    "description": "User-visible text. Source: заменить DIRECT на"
+  },
+  "msg_use_this_directive_instead_of_direct_for_requ_b250260e": {
+    "message": "Использовать указанную строку вместо DIRECT для неблокируемых запросов.",
+    "description": "User-visible text. Source: Использовать указанную строку вместо DIRECT для неблокируемых запросов."
+  },
+  "msg_too_many_custom_proxies_maximum_sub_350f6c81": {
+    "message": "Слишком много пользовательских прокси. Максимум: $param_1$.",
+    "description": "User-visible text. Source: Слишком много пользовательских прокси. Максимум: $SUB$.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_browser_proxy_apis_do_not_support_socks4_sock_4ce96b9a": {
+    "message": "Прокси-API браузера не поддерживает логин и пароль для SOCKS4/SOCKS5 — ни в Chromium, ни в Firefox. Используйте SOCKS без авторизации либо HTTP/HTTPS-прокси.",
+    "description": "User-visible text. Source: Прокси-API браузера не поддерживает логин и пароль для SOCKS4/SOCKS5 — ни в Chromium, ни в Firefox. Используйте SOCKS бе"
+  },
+  "msg_no_proxies_meet_your_requirements_e83bc752": {
+    "message": "Нет ни одного прокси, удовлетворяющего вашим требованиям!",
+    "description": "User-visible text. Source: Нет ни одного прокси, удовлетворяющего вашим требованиям!"
+  },
+  "msg_the_pac_update_was_cancelled_by_a_newer_setti_087c54d3": {
+    "message": "Запрос обновления PAC отменён более новым изменением настроек",
+    "description": "User-visible text. Source: Запрос обновления PAC отменён более новым изменением настроек"
+  },
+  "pac_provider_antizapret_description": {"message": "PAC-скрипт проекта «Антизапрет»."},
+  "pac_provider_anticensority_description": {"message": "PAC-скрипт проекта «Антицензорити»."},
+  "msg_only_your_sites_tor_custom_proxies_d3781c05": {
+    "message": "Только свои сайты (Tor / Свои прокси)",
+    "description": "User-visible text. Source: Только свои сайты (Tor / Свои прокси)"
+  },
+  "msg_only_manually_added_sites_are_routed_through__6e0c474c": {
+    "message": "Проксируются только вручную добавленные сайты через ваши прокси или локальный Tor.",
+    "description": "User-visible text. Source: Проксируются только вручную добавленные сайты через ваши прокси или локальный Tor."
+  },
+  "msg_custom_pac_url_5933ecf2": {
+    "message": "Свой PAC (по ссылке)",
+    "description": "User-visible text. Source: Свой PAC (по ссылке)"
+  },
+  "msg_a_ready_to_use_pac_script_at_your_own_direct__ca526c8e": {
+    "message": "Готовый PAC-скрипт по собственной прямой ссылке (HTTPS или HTTP на этом компьютере).",
+    "description": "User-visible text. Source: Готовый PAC-скрипт по собственной прямой ссылке (HTTPS или HTTP на этом компьютере)."
+  },
+  "msg_runet_censorship_bypass_68c3f483": {
+    "message": "Обход блокировок Рунета",
+    "description": "User-visible text. Source: Обход блокировок Рунета"
+  },
+  "msg_custom_pac_0c76be79": {
+    "message": "Свой PAC",
+    "description": "User-visible text. Source: Свой PAC"
+  },
+  "msg_disabled_3e958000": {
+    "message": "Отключено",
+    "description": "User-visible text. Source: Отключено"
+  },
+  "msg_pac_updated_sub_sub_9481d056": {
+    "message": "PAC обновлён: $param_1$ | $param_2$",
+    "description": "User-visible text. Source: PAC обновлён: $SUB$ | $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_the_provider_has_no_available_pac_script_urls_2fd9695a": {
+    "message": "У провайдера нет доступных адресов PAC-скрипта",
+    "description": "User-visible text. Source: У провайдера нет доступных адресов PAC-скрипта"
+  },
+  "msg_enter_a_valid_url_for_your_custom_pac_script_4ce9e844": {
+    "message": "Не указан корректный URL для своего PAC-скрипта",
+    "description": "User-visible text. Source: Не указан корректный URL для своего PAC-скрипта"
+  },
+  "msg_the_pac_provider_redirected_to_an_untrusted_h_4b1fdd0c": {
+    "message": "PAC-провайдер перенаправил запрос на недоверенный хост: $param_1$",
+    "description": "User-visible text. Source: PAC-провайдер перенаправил запрос на недоверенный хост: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_server_returned_an_empty_pac_script_a50f943f": {
+    "message": "Сервер вернул пустой PAC-скрипт",
+    "description": "User-visible text. Source: Сервер вернул пустой PAC-скрипт"
+  },
+  "msg_all_urls_are_unavailable_ea2246cd": {
+    "message": "Все адреса недоступны",
+    "description": "User-visible text. Source: Все адреса недоступны"
+  },
+  "msg_failed_to_download_the_pac_script_from_sub_d83eb735": {
+    "message": "Не удалось загрузить PAC-скрипт с адресов: $param_1$",
+    "description": "User-visible text. Source: Не удалось загрузить PAC-скрипт с адресов: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_unknown_pac_provider_sub_0b6f9cf5": {
+    "message": "Неизвестный провайдер PAC: $param_1$",
+    "description": "User-visible text. Source: Неизвестный провайдер PAC: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_pac_script_sub_is_already_up_to_date_d473bbb4": {
+    "message": "PAC-скрипт \"$param_1$\" уже актуален",
+    "description": "User-visible text. Source: PAC-скрипт \"$SUB$\" уже актуален",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_no_need_to_apply_again_4b0aed8f": {
+    "message": "Повторное применение не требуется",
+    "description": "User-visible text. Source: Повторное применение не требуется"
+  },
+  "msg_pac_script_sub_updated_successfully_6de11e5c": {
+    "message": "PAC-скрипт \"$param_1$\" успешно обновлён",
+    "description": "User-visible text. Source: PAC-скрипт \"$SUB$\" успешно обновлён",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_pac_size_sub_kb_c27da43e": {
+    "message": "Размер PAC: $param_1$ КБ",
+    "description": "User-visible text. Source: Размер PAC: $SUB$ КБ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_pac_synchronization_failed_for_sub_90d01013": {
+    "message": "Ошибка синхронизации PAC \"$param_1$\"",
+    "description": "User-visible text. Source: Ошибка синхронизации PAC \"$SUB$\"",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_pac_script_is_empty_f40d7963": {
+    "message": "PAC-скрипт пуст",
+    "description": "User-visible text. Source: PAC-скрипт пуст"
+  },
+  "msg_the_pac_script_contains_an_unmatched_characte_9e5e2c33": {
+    "message": "PAC-скрипт содержит непарный символ: $param_1$",
+    "description": "User-visible text. Source: PAC-скрипт содержит несогласованный символ $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_pac_script_contains_a_syntax_error_sub_85eec82d": {
+    "message": "PAC-скрипт содержит синтаксическую ошибку: $param_1$",
+    "description": "User-visible text. Source: PAC-скрипт содержит синтаксическую ошибку: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_pac_script_is_incomplete_unclosed_bracket_06ee6586": {
+    "message": "PAC-скрипт оборван: не закрыты скобки или блоки",
+    "description": "User-visible text. Source: PAC-скрипт оборван: не закрыты скобки или блоки"
+  },
+  "msg_the_response_does_not_contain_an_executable_f_428979a2": {
+    "message": "Ответ не содержит исполняемую функцию FindProxyForURL",
+    "description": "User-visible text. Source: Ответ не содержит исполняемую функцию FindProxyForURL"
+  },
+  "msg_proxy_authentication_7759383e": {
+    "message": "Аутентификация прокси",
+    "description": "User-visible text. Source: Аутентификация прокси"
+  },
+  "msg_sending_credentials_6adbc196": {
+    "message": "Отправка учётных данных",
+    "description": "User-visible text. Source: Отправка учётных данных"
+  },
+  "msg_the_browser_does_not_support_proxy_settings_s_c3082d3d": {
+    "message": "Браузер не поддерживает proxy.settings.$param_1$()",
+    "description": "User-visible text. Source: Браузер не поддерживает proxy.settings.$SUB$()",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_proxy_check_was_cancelled_by_a_settings_r_5b7a1cfb": {
+    "message": "Проверка прокси отменена сбросом настроек",
+    "description": "User-visible text. Source: Проверка прокси отменена сбросом настроек"
+  },
+  "msg_proxy_check_empty_address_2d604bfe": {
+    "message": "Проверка прокси: пустая строка",
+    "description": "User-visible text. Source: Проверка прокси: пустая строка"
+  },
+  "msg_the_proxy_address_is_empty_6d75e286": {
+    "message": "Передана пустая строка адреса прокси",
+    "description": "User-visible text. Source: Передана пустая строка адреса прокси"
+  },
+  "msg_empty_proxy_address_2a5b2c86": {
+    "message": "Пустая строка прокси",
+    "description": "User-visible text. Source: Пустая строка прокси"
+  },
+  "msg_proxy_check_invalid_format_3942c068": {
+    "message": "Проверка прокси: неверный формат",
+    "description": "User-visible text. Source: Проверка прокси: неверный формат"
+  },
+  "msg_a_host_or_port_is_missing_from_the_proxy_addr_8deb1d83": {
+    "message": "Не указан хост или порт для проверяемого прокси",
+    "description": "User-visible text. Source: Не указан хост или порт для проверяемого прокси"
+  },
+  "msg_host_or_port_is_missing_b4bbf9e7": {
+    "message": "Не указан хост или порт",
+    "description": "User-visible text. Source: Не указан хост или порт"
+  },
+  "msg_proxy_check_invalid_port_57f77bbb": {
+    "message": "Проверка прокси: неверный порт",
+    "description": "User-visible text. Source: Проверка прокси: неверный порт"
+  },
+  "msg_port_sub_is_outside_the_valid_range_1_65535_d383d658": {
+    "message": "Номер порта $param_1$ вне диапазона (1-65535)",
+    "description": "User-visible text. Source: Номер порта $SUB$ вне диапазона (1-65535)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_invalid_port_number_1_65535_48da3c6b": {
+    "message": "Неверный номер порта (1-65535)",
+    "description": "User-visible text. Source: Неверный номер порта (1-65535)"
+  },
+  "msg_browser_proxy_apis_do_not_support_socks4_sock_18db49ba": {
+    "message": "Прокси-API браузера не поддерживает авторизацию по логину и паролю для SOCKS4/SOCKS5 — ни в Chromium, ни в Firefox",
+    "description": "User-visible text. Source: Прокси-API браузера не поддерживает авторизацию по логину и паролю для SOCKS4/SOCKS5 — ни в Chromium, ни в Firefox"
+  },
+  "msg_unsupported_socks_authentication_ccd8cae5": {
+    "message": "Неподдерживаемая авторизация SOCKS",
+    "description": "User-visible text. Source: Неподдерживаемая авторизация SOCKS"
+  },
+  "msg_proxy_authentication_failed_407_proxy_authent_369d0eb4": {
+    "message": "Ошибка авторизации (407 Proxy Authentication Required): неверный логин или пароль",
+    "description": "User-visible text. Source: Ошибка авторизации (407 Proxy Authentication Required): неверный логин или пароль"
+  },
+  "msg_proxy_authentication_failed_407_f81ecb68": {
+    "message": "Ошибка авторизации прокси (407)",
+    "description": "User-visible text. Source: Ошибка авторизации прокси (407)"
+  },
+  "msg_the_server_returned_http_status_sub_e243638d": {
+    "message": "Сервер вернул статус HTTP $param_1$",
+    "description": "User-visible text. Source: Сервер вернул статус HTTP $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_no_response_6947861c": {
+    "message": "нет ответа",
+    "description": "User-visible text. Source: нет ответа"
+  },
+  "msg_the_proxy_returned_an_invalid_status_c76b5be9": {
+    "message": "Прокси вернул некорректный статус",
+    "description": "User-visible text. Source: Прокси вернул некорректный статус"
+  },
+  "msg_timeout_the_proxy_server_did_not_respond_with_0c5f062e": {
+    "message": "Таймаут: прокси-сервер не ответил за 5 секунд",
+    "description": "User-visible text. Source: Таймаут: прокси-сервер не ответил за 5 секунд"
+  },
+  "msg_proxy_connection_timed_out_a443899a": {
+    "message": "Таймаут подключения к прокси",
+    "description": "User-visible text. Source: Таймаут подключения к прокси"
+  },
+  "msg_authentication_failed_407_incorrect_username__4a9eba6e": {
+    "message": "Ошибка авторизации (407): неверный логин или пароль",
+    "description": "User-visible text. Source: Ошибка авторизации (407): неверный логин или пароль"
+  },
+  "msg_authentication_failed_79fb3249": {
+    "message": "Ошибка авторизации",
+    "description": "User-visible text. Source: Ошибка авторизации"
+  },
+  "msg_tls_ssl_error_if_your_local_proxy_does_not_us_fffbdb88": {
+    "message": "Ошибка TLS/SSL: если ваш локальный прокси без SSL, выберите протокол HTTP вместо HTTPS",
+    "description": "User-visible text. Source: Ошибка TLS/SSL: если ваш локальный прокси без SSL, выберите протокол HTTP вместо HTTPS"
+  },
+  "msg_proxy_ssl_tls_error_a5e9fedd": {
+    "message": "Ошибка SSL/TLS прокси",
+    "description": "User-visible text. Source: Ошибка SSL/TLS прокси"
+  },
+  "msg_cannot_connect_to_the_proxy_check_that_the_se_95fe5d54": {
+    "message": "Не удалось подключиться к прокси. Убедитесь, что сервер запущен и выбран правильный протокол (HTTP/HTTPS/SOCKS5)",
+    "description": "User-visible text. Source: Не удалось подключиться к прокси. Убедитесь, что сервер запущен и выбран правильный протокол (HTTP/HTTPS/SOCKS5)"
+  },
+  "msg_proxy_connection_failed_ee759242": {
+    "message": "Сбой подключения к прокси",
+    "description": "User-visible text. Source: Сбой подключения к прокси"
+  },
+  "msg_failed_to_restore_proxy_settings_after_the_ch_53688b8c": {
+    "message": "Не удалось восстановить настройки прокси после проверки: $param_1$",
+    "description": "User-visible text. Source: Не удалось восстановить настройки прокси после проверки: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_critical_proxy_restoration_error_1ab48bfb": {
+    "message": "Критическая ошибка восстановления прокси",
+    "description": "User-visible text. Source: Критическая ошибка восстановления прокси"
+  },
+  "msg_unknown_check_error_4cf33ab7": {
+    "message": "Неизвестная ошибка проверки",
+    "description": "User-visible text. Source: Неизвестная ошибка проверки"
+  },
+  "msg_proxy_settings_are_controlled_by_another_exte_41004226": {
+    "message": "Настройки прокси контролируются другим расширением или политикой браузера.",
+    "description": "User-visible text. Source: Настройки прокси контролируются другим расширением или политикой браузера."
+  },
+  "msg_applying_settings_is_waiting_for_another_atte_286026df": {
+    "message": "Применение настроек ожидает повторной попытки",
+    "description": "User-visible text. Source: Применение настроек ожидает повторной попытки"
+  },
+  "msg_invalid_settings_format_dc48c732": {
+    "message": "Повреждён формат настроек",
+    "description": "User-visible text. Source: Повреждён формат настроек"
+  },
+  "msg_these_settings_were_created_by_a_newer_versio_10a34f43": {
+    "message": "Настройки созданы более новой версией расширения",
+    "description": "User-visible text. Source: Настройки созданы более новой версией расширения"
+  },
+  "msg_no_changes_to_undo_0934f336": {
+    "message": "Нет изменений для отмены",
+    "description": "User-visible text. Source: Нет изменений для отмены"
+  },
+  "msg_this_change_is_too_large_to_undo_safely_use_i_e1b5ff7c": {
+    "message": "Изменение слишком велико для безопасной отмены. Используйте импорт или редактор списков.",
+    "description": "User-visible text. Source: Изменение слишком велико для безопасной отмены. Используйте импорт или редактор списков."
+  },
+  "msg_failed_to_apply_resource_rules_32100f47": {
+    "message": "Не удалось применить правила ресурсов",
+    "description": "User-visible text. Source: Не удалось применить правила ресурсов"
+  },
+  "msg_rules_are_saved_but_have_not_been_applied_yet_9917d69b": {
+    "message": "Правила сохранены, но ещё не применены",
+    "description": "User-visible text. Source: Правила сохранены, но ещё не применены"
+  },
+  "msg_unknown_site_mode_3989bf81": {
+    "message": "Неизвестный режим сайта",
+    "description": "User-visible text. Source: Неизвестный режим сайта"
+  },
+  "msg_the_tab_has_moved_to_another_site_reopen_the__58a7207a": {
+    "message": "Вкладка сменила сайт. Откройте расширение заново.",
+    "description": "User-visible text. Source: Вкладка сменила сайт. Откройте расширение заново."
+  },
+  "msg_enter_the_pac_script_url_be71f02a": {
+    "message": "Введите адрес ссылки на PAC-скрипт",
+    "description": "User-visible text. Source: Введите адрес ссылки на PAC-скрипт"
+  },
+  "msg_invalid_url_format_07825395": {
+    "message": "Некорректный формат URL-адреса",
+    "description": "User-visible text. Source: Некорректный формат URL адреса"
+  },
+  "msg_unsupported_protocol_sub_only_https_is_allowe_a4ec2209": {
+    "message": "Недопустимый протокол: $param_1$. Разрешён только https:",
+    "description": "User-visible text. Source: Недопустимый протокол: $SUB$. Разрешён только https:",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_only_secure_https_urls_are_allowed_insecure_h_2504927b": {
+    "message": "Разрешён только защищённый протокол https:. Небезопасный http: заблокирован.",
+    "description": "User-visible text. Source: Разрешён только защищённый протокол https:. Небезопасный http: заблокирован."
+  },
+  "msg_the_url_must_not_contain_an_embedded_username_9699d59e": {
+    "message": "URL не должен содержать встроенный логин и пароль (user:password@)",
+    "description": "User-visible text. Source: URL не должен содержать встроенный логин и пароль (user:password@)"
+  },
+  "msg_pac_redirect_blocked_sub_47ce1c5c": {
+    "message": "Перенаправление PAC заблокировано: $param_1$",
+    "description": "User-visible text. Source: Перенаправление PAC заблокировано: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_redirecting_pac_from_https_to_insecure_http_i_4be4fe87": {
+    "message": "Перенаправление PAC с HTTPS на небезопасный HTTP заблокировано.",
+    "description": "User-visible text. Source: Перенаправление PAC с HTTPS на небезопасный HTTP заблокировано."
+  },
+  "msg_load_failed_5263d105": {
+    "message": "⚠ Ошибка загрузки",
+    "description": "User-visible text. Source: ⚠ Ошибка загрузки"
+  },
+  "msg_failed_to_load_data_de4395f1": {
+    "message": "Ошибка загрузки данных",
+    "description": "User-visible text. Source: Ошибка загрузки данных"
+  },
+  "msg_saving_057ec605": {
+    "message": "⏳ Сохранение…",
+    "description": "User-visible text. Source: ⏳ Сохранение…"
+  },
+  "msg_saved_waiting_to_apply_cee8b842": {
+    "message": "Сохранено · ожидает применения",
+    "description": "User-visible text. Source: Сохранено · ожидает применения"
+  },
+  "msg_saved_6c67d096": {
+    "message": "✓ Сохранено",
+    "description": "User-visible text. Source: ✓ Сохранено"
+  },
+  "msg_error_fd89ce15": {
+    "message": "⚠ Ошибка",
+    "description": "User-visible text. Source: ⚠ Ошибка"
+  },
+
+  "msg_failed_4bdba3ac": {
+    "message": "Сбой",
+    "description": "User-visible text. Source: Сбой"
+  },
+  "msg_delete_be99b136": {
+    "message": "Удалить",
+    "description": "User-visible text. Source: Удалить"
+  },
+  "msg_resource_of_sub_85d3b7f7": {
+    "message": "Ресурс сайта $param_1$",
+    "description": "User-visible text. Source: Ресурс сайта $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_rule_source_a5e45b3c": {
+    "message": "Источник правила",
+    "description": "User-visible text. Source: Источник правила"
+  },
+
+
+
+
+
+
+
+
+
+  "msg_no_file_selected_69848927": {
+    "message": "Файл не выбран",
+    "description": "User-visible text. Source: Файл не выбран"
+  },
+  "msg_unsupported_file_format_sub_only_text_files_t_cf5e1a57": {
+    "message": "Файл имеет неподдерживаемый формат (.$param_1$). Поддерживаются только текстовые файлы (.txt) со списком доменов.",
+    "description": "User-visible text. Source: Файл имеет неподдерживаемый формат (.$SUB$). Поддерживаются только текстовые файлы (.txt) со списком доменов.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_file_is_too_large_sub_mb_the_maximum_text_91d224d0": {
+    "message": "Файл слишком большой ($param_1$ МБ). Максимальный размер текстового файла: 5 МБ.",
+    "description": "User-visible text. Source: Файл слишком большой ($SUB$ МБ). Максимальный размер текстового файла: 5 МБ.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_reading_the_file_timed_out_17a620bb": {
+    "message": "Превышено время чтения файла",
+    "description": "User-visible text. Source: Превышено время чтения файла"
+  },
+  "msg_failed_to_read_the_file_9985b0ad": {
+    "message": "Не удалось прочитать файл",
+    "description": "User-visible text. Source: Не удалось прочитать файл"
+  },
+  "msg_file_reading_was_cancelled_0f5f331d": {
+    "message": "Чтение файла прервано",
+    "description": "User-visible text. Source: Чтение файла прервано"
+  },
+  "msg_failed_to_decode_the_file_contents_4db11ffb": {
+    "message": "Не удалось декодировать содержимое файла",
+    "description": "User-visible text. Source: Не удалось декодировать содержимое файла"
+  },
+  "msg_the_file_is_empty_or_contains_only_whitespace_43e3a1ec": {
+    "message": "Файл пуст или содержит только пробелы",
+    "description": "User-visible text. Source: Файл пуст или содержит только пробелы"
+  },
+  "msg_the_file_contains_unreadable_binary_data_only_c1ccf183": {
+    "message": "Файл содержит нечитаемые бинарные данные. Поддерживаются только текстовые файлы (.txt) в кодировке UTF-8.",
+    "description": "User-visible text. Source: Файл содержит нечитаемые бинарные данные. Поддерживаются только текстовые файлы (.txt) в кодировке UTF-8."
+  },
+  "msg_no_valid_domain_names_were_found_in_the_file__2067fc4b": {
+    "message": "В файле не найдено ни одного корректного доменного имени (пропущено некорректных строк: $param_1$).",
+    "description": "User-visible text. Source: В файле не найдено ни одного корректного доменного имени (пропущено некорректных строк: $SUB$).",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_invalid_lines_skipped_sub_512d33d2": {
+    "message": " (пропущено некорректных строк: $param_1$)",
+    "description": "User-visible text. Source:  (пропущено некорректных строк: $SUB$)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+
+  "msg_import_failed_sub_24315934": {
+    "message": "❌ Ошибка загрузки: $param_1$",
+    "description": "User-visible text. Source: ❌ Ошибка загрузки: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_the_current_list_is_empty_nothing_to_export_158a939a": {
+    "message": "Текущий список пуст — нечего экспортировать",
+    "description": "User-visible text. Source: Текущий список пуст — нечего экспортировать"
+  },
+  "msg_domain_list_sub_exported_sub_count_sub_9dfe7642": {
+    "message": "# Список доменов ($param_1$)\n# Экспортировано: $param_2$\n# Количество: $param_3$\n\n",
+    "description": "User-visible text. Source: # Список доменов ($SUB$) # Экспортировано: $SUB$ # Количество: $SUB$ ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      },
+      "param_3": {
+        "content": "$3"
+      }
+    }
+  },
+  "msg_exported_sub_domains_to_sub_5cb228f3": {
+    "message": "✓ Экспортировано доменов: $param_1$. Файл: $param_2$.",
+    "description": "User-visible text. Source: ✓ Экспортировано $SUB$ доменов в файл $SUB$!",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_proxy_sub_direct_sub_allowlist_sub_9f111eff": {
+    "message": "# ПРОКСИРОВАТЬ:\n$param_1$\n\n===============================\n# НЕ ПРОКСИРОВАТЬ:\n$param_2$\n\n===============================\n# БЕЛЫЙ СПИСОК:\n$param_3$\n",
+    "description": "User-visible text. Source: # ПРОКСИРОВАТЬ: $SUB$ =============================== # НЕ ПРОКСИРОВАТЬ: $SUB$ =============================== # БЕЛЫЙ С",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      },
+      "param_3": {
+        "content": "$3"
+      }
+    }
+  },
+  "msg_list_a3e77aea": {
+    "message": "📋 Список",
+    "description": "User-visible text. Source: 📋 Список"
+  },
+  "msg_changes_are_saved_automatically_6ce33e8e": {
+    "message": "Изменения сохраняются автоматически",
+    "description": "User-visible text. Source: Изменения сохраняются автоматически"
+  },
+  "msg_text_mode_e918f67f": {
+    "message": "📝 Текстовый режим",
+    "description": "User-visible text. Source: 📝 Текстовый режим"
+  },
+  "msg_saved_automatically_sub_8848e52e": {
+    "message": "✓ Сохранено автоматически$param_1$",
+    "description": "User-visible text. Source: ✓ Сохранено автоматически$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_changes_will_be_saved_automatically_6db8e4d6": {
+    "message": "Изменения будут сохранены автоматически…",
+    "description": "User-visible text. Source: Изменения будут сохранены автоматически…"
+  },
+  "msg_the_saved_list_has_changed_your_draft_has_not_36e48c20": {
+    "message": "Сохранённый список изменился. Ваш текст ещё не применён; «Применить» заменит список.",
+    "description": "User-visible text. Source: Сохранённый список изменился. Ваш текст ещё не применён; «Применить» заменит список."
+  },
+  "msg_not_saved_apply_will_replace_the_entire_proxy_e8c154bc": {
+    "message": "Не сохранено. «Применить» заменит весь список прокси.",
+    "description": "User-visible text. Source: Не сохранено. «Применить» заменит весь список прокси."
+  },
+  "msg_use_apply_to_save_changes_to_this_list_278f74a1": {
+    "message": "Изменения списка применяются кнопкой «Применить».",
+    "description": "User-visible text. Source: Изменения списка применяются кнопкой «Применить»."
+  },
+
+  "msg_opening_extension_management_in_firefox_21563903": {
+    "message": "Открываем управление расширением в Firefox…",
+    "description": "User-visible text. Source: Открываем управление расширением в Firefox…"
+  },
+  "msg_failed_to_open_firefox_settings_sub_e16cbef9": {
+    "message": "Не удалось открыть настройки Firefox: $param_1$",
+    "description": "User-visible text. Source: Не удалось открыть настройки Firefox: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_failed_b15413de": {
+    "message": "сбой",
+    "description": "User-visible text. Source: сбой"
+  },
+  "msg_error_37eceb9f": {
+    "message": "Ошибка: ",
+    "description": "User-visible text. Source: Ошибка: "
+  },
+  "msg_click_to_open_firefox_permissions_3bee63f9": {
+    "message": " Нажмите, чтобы открыть разрешения Firefox.",
+    "description": "User-visible text. Source:  Нажмите, чтобы открыть разрешения Firefox."
+  },
+  "msg_https_only_84ba77b3": {
+    "message": "только HTTPS",
+    "description": "User-visible text. Source: только HTTPS"
+  },
+  "msg_pac_rules_203bc29a": {
+    "message": "по PAC",
+    "description": "User-visible text. Source: по PAC"
+  },
+  "msg_via_proxy_64f51a1b": {
+    "message": "через прокси",
+    "description": "User-visible text. Source: через прокси"
+  },
+  "msg_direct_f9efbd77": {
+    "message": "напрямую",
+    "description": "User-visible text. Source: напрямую"
+  },
+  "msg_check_failed_4e395375": {
+    "message": "Ошибка проверки",
+    "description": "User-visible text. Source: Ошибка проверки"
+  },
+  "msg_failed_to_apply_pac_sub_click_to_open_firefox_a5c7c194": {
+    "message": "Не удалось применить PAC: $param_1$ Нажмите, чтобы открыть разрешения Firefox.",
+    "description": "User-visible text. Source: Не удалось применить PAC: $SUB$ Нажмите, чтобы открыть разрешения Firefox.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_failed_to_apply_pac_sub_905498f4": {
+    "message": "Не удалось применить PAC: $param_1$",
+    "description": "User-visible text. Source: Не удалось применить PAC: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_warning_all_your_proxies_sub_are_unavailable_913b09a2": {
+    "message": "Внимание: Все ваши прокси ($param_1$) недоступны!",
+    "description": "User-visible text. Source: Внимание: Все ваши прокси ($SUB$) недоступны!",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_warning_sub_of_your_sub_proxies_are_unavailab_17a33ccc": {
+    "message": "Внимание: недоступных прокси: $param_1$ из $param_2$.",
+    "description": "User-visible text. Source: Внимание: $SUB$ из $SUB$ ваших прокси недоступен.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_not_applied_09415f65": {
+    "message": "Не применено",
+    "description": "User-visible text. Source: Не применено"
+  },
+  "msg_no_control_cce05ad1": {
+    "message": "Нет контроля",
+    "description": "User-visible text. Source: Нет контроля"
+  },
+  "msg_working_0232a305": {
+    "message": "Работает",
+    "description": "User-visible text. Source: Работает"
+  },
+  "msg_never_updated_e314a133": {
+    "message": "Не обновлялся",
+    "description": "User-visible text. Source: Не обновлялся"
+  },
+  "msg_local_rules_ff97b927": {
+    "message": "Локальные правила",
+    "description": "User-visible text. Source: Локальные правила"
+  },
+  "msg_enter_a_url_26d5dd4d": {
+    "message": "Укажите ссылку",
+    "description": "User-visible text. Source: Укажите ссылку"
+  },
+  "msg_updated_sub_0c40c480": {
+    "message": "Обновлён: $param_1$",
+    "description": "User-visible text. Source: Обновлен: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_not_updated_yet_5b05f298": {
+    "message": "Ещё не обновлялся",
+    "description": "User-visible text. Source: Еще не обновлялся"
+  },
+  "msg_a_restriction_is_enabled_6a5d64e3": {
+    "message": "есть включённое ограничение",
+    "description": "User-visible text. Source: есть включённое ограничение"
+  },
+
+  "msg_authentication_59664d4b": {
+    "message": "Авторизация",
+    "description": "User-visible text. Source: Авторизация"
+  },
+  "msg_checking_60762acf": {
+    "message": "Проверка",
+    "description": "User-visible text. Source: 🔄 Проверка"
+  },
+  "msg_sub_ms_485532ae": {
+    "message": "$param_1$ мс",
+    "description": "User-visible text. Source: $SUB$мс",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_available_d81568b8": {
+    "message": "Доступен",
+    "description": "User-visible text. Source: Доступен"
+  },
+  "msg_latency_sub_last_checked_sub_sub_08f10410": {
+    "message": "Задержка: $param_1$. Последняя проверка: $param_2$$param_3$",
+    "description": "User-visible text. Source: Задержка: $SUB$. Последняя проверка: $SUB$$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      },
+      "param_3": {
+        "content": "$3"
+      }
+    }
+  },
+  "msg_the_result_may_be_out_of_date_824db2ef": {
+    "message": ". Результат мог устареть",
+    "description": "User-visible text. Source: . Результат мог устареть"
+  },
+  "msg_latency_sub_a8827757": {
+    "message": "Задержка: $param_1$",
+    "description": "User-visible text. Source: Задержка: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_unavailable_53ba89ac": {
+    "message": "Недоступен",
+    "description": "User-visible text. Source: Недоступен"
+  },
+  "msg_sub_last_checked_sub_sub_31650300": {
+    "message": "$param_1$. Последняя проверка: $param_2$$param_3$",
+    "description": "User-visible text. Source: $SUB$. Последняя проверка: $SUB$$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      },
+      "param_3": {
+        "content": "$3"
+      }
+    }
+  },
+  "msg_no_connection_ee60619b": {
+    "message": "Нет связи",
+    "description": "User-visible text. Source: 🕘 Нет связи"
+  },
+  "msg_unavailable_0a1f9ba9": {
+    "message": "Недоступен",
+    "description": "User-visible text. Source: 🔴 Недоступен"
+  },
+  "msg_not_checked_f951698d": {
+    "message": "Не проверен",
+    "description": "User-visible text. Source: ❓ Не проверен"
+  },
+  "msg_check_availability_5579e6b7": {
+    "message": "Проверить доступность",
+    "description": "User-visible text. Source: Проверить доступность"
+  },
+  "msg_checking_sub_39a95af3": {
+    "message": "Проверка $param_1$...",
+    "description": "User-visible text. Source: Проверка $SUB$...",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_sub_is_available_sub_ms_2be3b1ee": {
+    "message": "✓ $param_1$ доступен ($param_2$ мс)",
+    "description": "User-visible text. Source: ✓ $SUB$ доступен ($SUB$ мс)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_sub_is_unavailable_sub_33e94220": {
+    "message": "✕ $param_1$ недоступен: $param_2$",
+    "description": "User-visible text. Source: ✕ $SUB$ недоступен: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+
+  "msg_enter_an_ip_address_or_host_e_g_127_0_0_1_acccaf52": {
+    "message": "Укажите IP-адрес или хост (напр. 127.0.0.1)",
+    "description": "User-visible text. Source: Укажите IP-адрес или хост (напр. 127.0.0.1)"
+  },
+  "msg_invalid_ip_address_or_host_883d3e7e": {
+    "message": "Некорректный IP-адрес или хост",
+    "description": "User-visible text. Source: Некорректный IP-адрес или хост"
+  },
+  "msg_check_the_proxy_address_and_port_1_65535_12481406": {
+    "message": "Проверьте адрес прокси и номер порта (1–65535)",
+    "description": "User-visible text. Source: Проверьте адрес прокси и номер порта (1–65535)"
+  },
+  "msg_this_proxy_is_already_in_the_list_84e5bfa6": {
+    "message": "Такой прокси уже добавлен в список",
+    "description": "User-visible text. Source: Такой прокси уже добавлен в список"
+  },
+  "msg_proxy_unavailable_sub_d325e3a8": {
+    "message": "Прокси недоступен: $param_1$",
+    "description": "User-visible text. Source: Прокси недоступен: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_proxy_is_available_sub_ms_and_has_been_added_fab250e5": {
+    "message": "✓ Прокси доступен ($param_1$ мс) и добавлен!",
+    "description": "User-visible text. Source: ✓ Прокси доступен ($SUB$ мс) и добавлен!",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_network_failure_dd0f89b6": {
+    "message": "Сбой сети",
+    "description": "User-visible text. Source: Сбой сети"
+  },
+  "msg_checking_f325c5cc": {
+    "message": "Проверка...",
+    "description": "User-visible text. Source: Проверка..."
+  },
+  "msg_add_and_check_2392c0b8": {
+    "message": "Добавить и проверить",
+    "description": "User-visible text. Source: Добавить и проверить"
+  },
+  "msg_allowlist_5d2e3dbd": {
+    "message": "белый список",
+    "description": "User-visible text. Source: белый список"
+  },
+  "msg_logs_copied_to_the_clipboard_b2eb247a": {
+    "message": "✓ Логи скопированы в буфер обмена!",
+    "description": "User-visible text. Source: ✓ Логи скопированы в буфер обмена!"
+  },
+  "msg_failed_to_copy_to_the_clipboard_2da3371a": {
+    "message": "Не удалось скопировать в буфер обмена",
+    "description": "User-visible text. Source: Не удалось скопировать в буфер обмена"
+  },
+  "msg_the_log_is_empty_nothing_to_copy_99cda969": {
+    "message": "Логи пусты — нечего копировать",
+    "description": "User-visible text. Source: Логи пусты — нечего копировать"
+  },
+  "msg_the_log_is_empty_nothing_to_export_0e05bccf": {
+    "message": "Логи пусты — нечего экспортировать",
+    "description": "User-visible text. Source: Логи пусты — нечего экспортировать"
+  },
+  "msg_log_file_exported_4f456a34": {
+    "message": "✓ Файл логов успешно выгружен!",
+    "description": "User-visible text. Source: ✓ Файл логов успешно выгружен!"
+  },
+  "msg_clear_the_entire_error_log_f2d35721": {
+    "message": "Очистить весь журнал ошибок и сбоев?",
+    "description": "User-visible text. Source: Очистить весь журнал ошибок и сбоев?"
+  },
+  "msg_log_cleared_8c011aaf": {
+    "message": "Журнал логов очищен",
+    "description": "User-visible text. Source: Журнал логов очищен"
+  },
+  "msg_delete_change_history_rules_and_do_not_add_au_f947995e": {
+    "message": "Удалить историю изменений? Правила и отметки «не добавлять автоматически» сохранятся.",
+    "description": "User-visible text. Source: Удалить историю изменений? Правила и отметки «не добавлять автоматически» сохранятся."
+  },
+  "msg_history_deleted_57e6da69": {
+    "message": "История удалена",
+    "description": "User-visible text. Source: История удалена"
+  },
+  "msg_invalid_domain_import": {"message": "Некорректные данные для импорта доменов."},
+  "msg_use_dedicated_proxy_domain_operations": {"message": "Используйте отдельные команды для прокси и доменных правил."},
+  "msg_unknown_action": {"message": "Неизвестная команда: $action$", "placeholders": {"action": {"content": "$1"}}},
+  "firefoxPacRestoreUnavailable": {"message": "Исходный код PAC Firefox недоступен. Повторно примените PAC в настройках."},
+  "optionsResetReadbackFailed": {"message": "Настройки сброшены, но не удалось обновить данные. Обновите страницу."},
+  "msg_downloading_and_applying_your_pac_script_73e85156": {
+    "message": "Загрузка и применение своего PAC-скрипта...",
+    "description": "User-visible text. Source: Загрузка и применение своего PAC-скрипта..."
+  },
+  "msg_your_pac_script_was_downloaded_and_applied_68bf08d2": {
+    "message": "✓ Свой PAC-скрипт успешно загружен и применён!",
+    "description": "User-visible text. Source: ✓ Свой PAC-скрипт успешно загружен и применён!"
+  },
+  "msg_failed_to_download_pac_34599d21": {
+    "message": "Не удалось загрузить PAC",
+    "description": "User-visible text. Source: Не удалось загрузить PAC"
+  },
+  "msg_no_working_proxy_configure_a_proxy_in_my_prox_5507b02d": {
+    "message": "❌ Нет рабочего прокси! Настройте прокси во вкладке «Прокси»",
+    "description": "User-visible text. Source: ❌ Нет рабочего прокси! Настройте прокси во вкладке «Прокси»"
+  },
+  "msg_installing_your_pac_script_6bee6c48": {
+    "message": "Установка своего PAC-скрипта...",
+    "description": "User-visible text. Source: Установка своего PAC-скрипта..."
+  },
+  "msg_your_pac_script_is_installed_0e199b55": {
+    "message": "Свой PAC-скрипт установлен!",
+    "description": "User-visible text. Source: Свой PAC-скрипт установлен!"
+  },
+  "msg_enter_a_direct_pac_script_url_and_click_apply_bdc39d75": {
+    "message": "Укажите прямую ссылку на PAC-скрипт и нажмите «Применить»",
+    "description": "User-visible text. Source: Укажите прямую ссылку на PAC-скрипт и нажмите «Применить»"
+  },
+  "msg_disabling_proxy_be6a5e5a": {
+    "message": "Отключение прокси...",
+    "description": "User-visible text. Source: Отключение прокси..."
+  },
+  "msg_proxy_disabled_a2fd1e2b": {
+    "message": "Прокси отключён",
+    "description": "User-visible text. Source: Прокси отключен"
+  },
+  "msg_installing_pac_script_sub_eb597f4b": {
+    "message": "Установка PAC-скрипта \"$param_1$\"...",
+    "description": "User-visible text. Source: Установка PAC-скрипта \"$SUB$\"...",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_pac_script_sub_installed_35eaff15": {
+    "message": "PAC-скрипт \"$param_1$\" установлен!",
+    "description": "User-visible text. Source: PAC-скрипт \"$SUB$\" установлен!",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_failed_to_install_pac_3087f370": {
+    "message": "Не удалось установить PAC",
+    "description": "User-visible text. Source: Не удалось установить PAC"
+  },
+  "msg_select_a_pac_provider_first_2614fea6": {
+    "message": "Сначала выберите PAC-провайдера",
+    "description": "User-visible text. Source: Сначала выберите PAC-провайдера"
+  },
+  "msg_updating_the_pac_script_07fb13cc": {
+    "message": "Обновление PAC-скрипта...",
+    "description": "User-visible text. Source: Обновление PAC-скрипта..."
+  },
+  "msg_pac_script_updated_a7c851de": {
+    "message": "PAC-скрипт успешно обновлён!",
+    "description": "User-visible text. Source: PAC-скрипт успешно обновлён!"
+  },
+  "msg_update_failed_798e384c": {
+    "message": "Ошибка обновления: ",
+    "description": "User-visible text. Source: Ошибка обновления: "
+  },
+  "msg_checking_all_proxies_eaa51f32": {
+    "message": "Проверка всех прокси...",
+    "description": "User-visible text. Source: Проверка всех прокси..."
+  },
+  "msg_check_complete_880c43c5": {
+    "message": "Проверка завершена",
+    "description": "User-visible text. Source: Проверка завершена"
+  },
+  "msg_text_3091aca2": {
+    "message": "Текст",
+    "description": "User-visible text. Source: Текст"
+  },
+  "msg_form_b26b88d6": {
+    "message": "Форма",
+    "description": "User-visible text. Source: Форма"
+  },
+  "msg_saving_9c27c381": {
+    "message": "Сохраняем…",
+    "description": "User-visible text. Source: Сохраняем…"
+  },
+  "msg_the_list_is_saved_refreshing_the_current_stat_ca109519": {
+    "message": "Список сохранён. Обновление актуального состояния ещё не подтверждено.",
+    "description": "User-visible text. Source: Список сохранён. Обновление актуального состояния ещё не подтверждено."
+  },
+  "msg_the_saved_list_has_already_changed_check_the__b38ea703": {
+    "message": "Сохранённый список уже изменился. Проверьте актуальные данные и черновик.",
+    "description": "User-visible text. Source: Сохранённый список уже изменился. Проверьте актуальные данные и черновик."
+  },
+  "msg_the_list_is_saved_applying_it_is_waiting_for__c9687d2a": {
+    "message": "Список сохранён. Применение ожидает повторной попытки.",
+    "description": "User-visible text. Source: Список сохранён. Применение ожидает повторной попытки."
+  },
+  "msg_proxy_list_saved_375fb339": {
+    "message": "Список прокси сохранён",
+    "description": "User-visible text. Source: Список прокси сохранён"
+  },
+  "msg_invalid_format_396ace06": {
+    "message": "Неверный формат",
+    "description": "User-visible text. Source: Неверный формат"
+  },
+  "msg_failed_to_save_the_proxy_list_1196b92d": {
+    "message": "Не удалось сохранить список прокси",
+    "description": "User-visible text. Source: Не удалось сохранить список прокси"
+  },
+  "msg_apply_e15f960d": {
+    "message": "Применить",
+    "description": "User-visible text. Source: Применить"
+  },
+  "msg_checking_local_proxy_cea92cfe": {
+    "message": "Проверяем локальный прокси…",
+    "description": "User-visible text. Source: Проверяем локальный прокси…"
+  },
+  "msg_enable_54768313": {
+    "message": "включить",
+    "description": "User-visible text. Source: включить"
+  },
+  "msg_disable_fa545d9d": {
+    "message": "выключить",
+    "description": "User-visible text. Source: выключить"
+  },
+  "msg_failed_to_sub_5342e22f": {
+    "message": "Не удалось $param_1$: ",
+    "description": "User-visible text. Source: Не удалось $SUB$: ",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_local_proxy_unavailable_9d04b608": {
+    "message": "локальный прокси недоступен",
+    "description": "User-visible text. Source: локальный прокси недоступен"
+  },
+  "msg_sub_ms_124b5754": {
+    "message": ", $param_1$ мс",
+    "description": "User-visible text. Source: , $SUB$ мс",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_proxy_available_sub_sub_b4142c92": {
+    "message": "✓ Прокси доступен: $param_1$$param_2$",
+    "description": "User-visible text. Source: ✓ Прокси доступен: $SUB$$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_settings_updated_d8ea53b0": {
+    "message": "Настройки обновлены",
+    "description": "User-visible text. Source: Настройки обновлены"
+  },
+  "msg_error_sub_9ca75e4a": {
+    "message": "Ошибка: $param_1$",
+    "description": "User-visible text. Source: Ошибка: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_failed_to_save_the_setting_752f6fb0": {
+    "message": "не удалось сохранить настройку",
+    "description": "User-visible text. Source: не удалось сохранить настройку"
+  },
+  "msg_settings_saved_dc80b2da": {
+    "message": "✓ Настройки сохранены",
+    "description": "User-visible text. Source: ✓ Настройки сохранены"
+  },
+  "msg_failed_to_save_6d1e3f7c": {
+    "message": "Не удалось сохранить",
+    "description": "User-visible text. Source: Не удалось сохранить"
+  },
+  "msg_notification_settings_updated_2669bcf6": {
+    "message": "Оповещения обновлены",
+    "description": "User-visible text. Source: Оповещения обновлены"
+  },
+  "msg_testing_f7c8f44d": {
+    "message": "Тестирование...",
+    "description": "User-visible text. Source: Тестирование..."
+  },
+  "msg_available_sub_ms_98493bf5": {
+    "message": "✓ Доступно ($param_1$ мс)",
+    "description": "User-visible text. Source: ✓ Доступно ($SUB$ мс)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_error_sub_f9b87abd": {
+    "message": "✕ Ошибка ($param_1$)",
+    "description": "User-visible text. Source: ✕ Ошибка ($SUB$)",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+
+  "msg_pac_installed_in_the_browser_b3a5d782": {
+    "message": "// PAC, установленный в браузере",
+    "description": "User-visible text. Source: // PAC, установленный в браузере"
+  },
+  "msg_preview_of_saved_settings_application_has_not_e210f47a": {
+    "message": "// Предпросмотр по сохранённым настройкам; применение не подтверждено",
+    "description": "User-visible text. Source: // Предпросмотр по сохранённым настройкам; применение не подтверждено"
+  },
+  "msg_no_pac_script_installed_b4950c71": {
+    "message": "// PAC-скрипт не установлен",
+    "description": "User-visible text. Source: // PAC-скрипт не установлен"
+  },
+  "msg_reset_all_settings_to_defaults_e8ab9d8b": {
+    "message": "Сбросить все настройки к исходным?",
+    "description": "User-visible text. Source: Сбросить все настройки к исходным?"
+  },
+  "msg_resetting_settings_3250682c": {
+    "message": "Сброс настроек...",
+    "description": "User-visible text. Source: Сброс настроек..."
+  },
+  "msg_settings_reset_78395c27": {
+    "message": "Настройки сброшены!",
+    "description": "User-visible text. Source: Настройки сброшены!"
+  },
+  "msg_log_refreshed_3e3abc85": {
+    "message": "Список логов обновлён",
+    "description": "User-visible text. Source: Список логов обновлён"
+  },
+  "msg_no_entries_match_the_filter_65bb1c4c": {
+    "message": "🔍 Записей по фильтру не найдено",
+    "description": "User-visible text. Source: 🔍 Записей по фильтру не найдено"
+  },
+  "msg_no_errors_recorded_0986be50": {
+    "message": "🛡️ Ошибок не зафиксировано",
+    "description": "User-visible text. Source: 🛡️ Ошибок не зафиксировано"
+  },
+  "msg_try_changing_the_category_or_clearing_the_sea_5ae7e689": {
+    "message": "Попробуйте изменить категорию или очистить поисковый запрос",
+    "description": "User-visible text. Source: Попробуйте изменить категорию или очистить поисковый запрос"
+  },
+  "msg_network_requests_proxies_and_pac_scripts_are__8ccd866d": {
+    "message": "Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме",
+    "description": "User-visible text. Source: Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме"
+  },
+  "msg_network_f3f1c8f5": {
+    "message": "🌐 Сеть",
+    "description": "User-visible text. Source: 🌐 Сеть"
+  },
+  "msg_proxy_b93fd429": {
+    "message": "⚙️ Прокси",
+    "description": "User-visible text. Source: ⚙️ Прокси"
+  },
+  "msg_system_6d0c6b0c": {
+    "message": "💻 Система",
+    "description": "User-visible text. Source: 💻 Система"
+  },
+  "msg_error_bf22dfee": {
+    "message": "Ошибка",
+    "description": "User-visible text. Source: Ошибка"
+  },
+  "msg_warning_233a8e99": {
+    "message": "Предупреждение",
+    "description": "User-visible text. Source: Предупреждение"
+  },
+  "msg_info_3319b9b0": {
+    "message": "Инфо",
+    "description": "User-visible text. Source: Инфо"
+  },
+  "msg_repeated_sub_times_1b3c0c12": {
+    "message": "Число повторений: $param_1$",
+    "description": "User-visible text. Source: Повторено $SUB$ раз",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_copy_this_entry_21bc6d3d": {
+    "message": "Скопировать эту запись",
+    "description": "User-visible text. Source: Скопировать эту запись"
+  },
+  "msg_copy_this_log_entry_3c7795fa": {
+    "message": "Скопировать эту запись журнала",
+    "description": "User-visible text. Source: Скопировать эту запись журнала"
+  },
+  "msg_click_to_show_details_29a1b869": {
+    "message": "▶ Нажмите, чтобы посмотреть подробности",
+    "description": "User-visible text. Source: ▶ Нажмите, чтобы посмотреть подробности"
+  },
+  "msg_hide_details_00917413": {
+    "message": "▼ Скрыть подробности",
+    "description": "User-visible text. Source: ▼ Скрыть подробности"
+  },
+  "msg_entry_copied_10769687": {
+    "message": "✓ Запись скопирована",
+    "description": "User-visible text. Source: ✓ Запись скопирована"
+  },
+  "msg_failed_to_copy_the_entry_3957d21c": {
+    "message": "Не удалось скопировать запись",
+    "description": "User-visible text. Source: Не удалось скопировать запись"
+  },
+  "msg_entry_7422f459": {
+    "message": "запись",
+    "description": "User-visible text. Source: запись"
+  },
+  "msg_entries_d216291a": {
+    "message": "записи",
+    "description": "User-visible text. Source: записи"
+  },
+  "msg_entries_e4b0dea7": {
+    "message": "записей",
+    "description": "User-visible text. Source: записей"
+  },
+  "msg_no_connection_9f0c20cc": {
+    "message": "Нет связи",
+    "description": "User-visible text. Source: Нет связи"
+  },
+  "msg_failed_to_load_settings_76fbbdec": {
+    "message": "Не удалось загрузить настройки.",
+    "description": "User-visible text. Source: Не удалось загрузить настройки."
+  },
+  "msg_version_sub_a48a5022": {
+    "message": "Версия $param_1$",
+    "description": "User-visible text. Source: Версия $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+
+  "msg_for_the_whole_tab_the_page_videos_images_and__3ce1328f": {
+    "message": "Для всей вкладки: страницы, видео, изображений и других ресурсов.",
+    "description": "User-visible text. Source: Для всей вкладки: страницы, видео, изображений и других ресурсов."
+  },
+  "msg_for_the_site_and_detected_resources_resource__f49ef3e9": {
+    "message": "Для сайта и найденных ресурсов. Правила ресурсов общие для всех сайтов.",
+    "description": "User-visible text. Source: Для сайта и найденных ресурсов. Правила ресурсов общие для всех сайтов."
+  },
+  "msg_in_a_private_window_only_the_site_rule_change_2f20c3da": {
+    "message": "В приватном окне меняется правило сайта. Список ресурсов не собирается.",
+    "description": "User-visible text. Source: В приватном окне меняется правило сайта. Список ресурсов не собирается."
+  },
+  "msg_only_the_main_site_domain_rule_changes_28b6eb6c": {
+    "message": "Меняется правило основного домена сайта.",
+    "description": "User-visible text. Source: Меняется правило основного домена сайта."
+  },
+  "msg_restrictions_sub_requests_outside_these_restr_190f99dc": {
+    "message": " Ограничения: $param_1$. Запросы вне этих ограничений идут напрямую.",
+    "description": "User-visible text. Source:  Ограничения: $SUB$. Запросы вне этих ограничений идут напрямую.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_selected_sub_a57f6a02": {
+    "message": "Выбрано: $param_1$",
+    "description": "User-visible text. Source: Выбрано: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_last_connection_sub_869f5c83": {
+    "message": " · последнее соединение: $param_1$",
+    "description": "User-visible text. Source:  · последнее соединение: $SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_proxy_3a377386": {
+    "message": "прокси",
+    "description": "User-visible text. Source: прокси"
+  },
+  "msg_resource_added_automatically_efd98e94": {
+    "message": "Ресурс добавлен автоматически",
+    "description": "User-visible text. Source: Ресурс добавлен автоматически"
+  },
+  "msg_mode_selected_for_this_site_dce783da": {
+    "message": "Режим выбран для сайта",
+    "description": "User-visible text. Source: Режим выбран для сайта"
+  },
+  "msg_rule_imported_from_a_file_45ed3e33": {
+    "message": "Правило из файла",
+    "description": "User-visible text. Source: Правило из файла"
+  },
+  "msg_manual_rule_908be428": {
+    "message": "Ручное правило",
+    "description": "User-visible text. Source: Ручное правило"
+  },
+  "msg_saved_rule_c9b76410": {
+    "message": "Сохранённое правило",
+    "description": "User-visible text. Source: Сохранённое правило"
+  },
+  "msg_the_selected_pac_script_determines_the_route_dd621449": {
+    "message": "Маршрут определяет выбранный PAC-скрипт.",
+    "description": "User-visible text. Source: Маршрут определяет выбранный PAC-скрипт."
+  },
+  "msg_resources_from_private_tabs_are_not_retained_49478bdd": {
+    "message": "В приватной вкладке список ресурсов не сохраняется.",
+    "description": "User-visible text. Source: В приватной вкладке список ресурсов не сохраняется."
+  },
+  "msg_resources_will_appear_as_the_site_loads_reloa_85f0af8b": {
+    "message": "Ресурсы появятся по мере загрузки сайта. При необходимости перезагрузите его.",
+    "description": "User-visible text. Source: Ресурсы появятся по мере загрузки сайта. При необходимости перезагрузите его."
+  },
+
+  "msg_resource_list_limit_reached_b433753d": {
+    "message": " Достигнут предел списка ресурсов.",
+    "description": "User-visible text. Source:  Достигнут предел списка ресурсов."
+  },
+  "msg_the_extension_is_disabled_rules_are_saved_and_f8a8c3eb": {
+    "message": "Расширение отключено. Правила сохранятся и начнут работать после включения PAC.",
+    "description": "User-visible text. Source: Расширение отключено. Правила сохранятся и начнут работать после включения PAC."
+  },
+  "msg_no_proxy_control_check_permissions_and_pac_se_3133dd91": {
+    "message": "Нет управления прокси. Проверьте разрешения и настройки PAC; возможно, прокси управляет другое расширение.",
+    "description": "User-visible text. Source: Нет управления прокси. Проверьте разрешения и настройки PAC; возможно, прокси управляет другое расширение."
+  },
+  "msg_connect_your_own_proxy_tor_or_warp_to_switch__1e9285d7": {
+    "message": "Для переключения сайта вместе с ресурсами подключите свой прокси, Tor или WARP.",
+    "description": "User-visible text. Source: Для переключения сайта вместе с ресурсами подключите свой прокси, Tor или WARP."
+  },
+  "msg_select_and_enable_pac_dcc3153b": {
+    "message": "Выбрать и включить PAC",
+    "description": "User-visible text. Source: Выбрать и включить PAC"
+  },
+  "msg_check_connection_d6d828dc": {
+    "message": "Проверить подключение",
+    "description": "User-visible text. Source: Проверить подключение"
+  },
+  "msg_set_up_your_proxy_4c80bb5f": {
+    "message": "Настроить свой прокси",
+    "description": "User-visible text. Source: Настроить свой прокси"
+  },
+
+  "msg_saving_mode_ad4188d7": {
+    "message": "Сохраняем режим…",
+    "description": "User-visible text. Source: Сохраняем режим…"
+  },
+  "msg_rules_saved_retry_applying_them_above_5418bae1": {
+    "message": "Правила сохранены. Для применения повторите попытку выше.",
+    "description": "User-visible text. Source: Правила сохранены. Для применения повторите попытку выше."
+  },
+  "msg_rules_saved_enable_pac_to_use_them_7e89fefb": {
+    "message": "Правила сохранены. Для работы включите PAC.",
+    "description": "User-visible text. Source: Правила сохранены. Для работы включите PAC."
+  },
+  "msg_sub_sub_reload_the_site_to_refresh_connection_41fb1aff": {
+    "message": "$param_1$: $param_2$. Перезагрузите сайт, чтобы обновить соединения.",
+    "description": "User-visible text. Source: $SUB$: $SUB$. Перезагрузите сайт, чтобы обновить соединения.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_site_and_resources_9dcdb919": {
+    "message": "Сайт и ресурсы",
+    "description": "User-visible text. Source: Сайт и ресурсы"
+  },
+  "msg_site_b4541abd": {
+    "message": "Сайт",
+    "description": "User-visible text. Source: Сайт"
+  },
+  "msg_the_tab_has_moved_to_another_site_data_refres_bb5e32a9": {
+    "message": "Вкладка сменила сайт. Данные обновлены.",
+    "description": "User-visible text. Source: Вкладка сменила сайт. Данные обновлены."
+  },
+
+  "msg_settings_are_saved_but_have_not_been_applied__7dcb3526": {
+    "message": "Настройки сохранены, но ещё не применены.$param_1$",
+    "description": "User-visible text. Source: Настройки сохранены, но ещё не применены.$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msg_apply_again_4548c504": {
+    "message": "Применить снова",
+    "description": "User-visible text. Source: Применить снова"
+  },
+  "msg_applying_b001f5d8": {
+    "message": "Применяем…",
+    "description": "User-visible text. Source: Применяем…"
+  },
+  "msg_no_response_from_the_background_process_1efd4dd6": {
+    "message": "Нет ответа от фонового процесса",
+    "description": "User-visible text. Source: Нет ответа фонового процесса"
+  },
+  "msg_automatically_detected_resources_59513472": {
+    "message": "Автоматически найденные ресурсы",
+    "description": "User-visible text. Source: Автоматически найденные ресурсы"
+  },
+  "msg_site_mode_switch_0ad4785f": {
+    "message": "Переключение сайта",
+    "description": "User-visible text. Source: Переключение сайта"
+  },
+  "msg_manual_change_e949b5d6": {
+    "message": "Ручное изменение",
+    "description": "User-visible text. Source: Ручное изменение"
+  },
+  "msg_rules_imported_4513ec88": {
+    "message": "Импорт правил",
+    "description": "User-visible text. Source: Импорт правил"
+  },
+  "msg_rule_change_adbe9d5b": {
+    "message": "Изменение правил",
+    "description": "User-visible text. Source: Изменение правил"
+  },
+  "msg_rule_changes_will_appear_here_existing_settin_d9e351cf": {
+    "message": "Здесь появятся изменения правил. Старые настройки сохранены.",
+    "description": "User-visible text. Source: Здесь появятся изменения правил. Старые настройки сохранены."
+  },
+  "msg_sub_rules_sub_sub_2e625462": {
+    "message": "$param_1$ · правил: $param_2$$param_3$",
+    "description": "User-visible text. Source: $SUB$ · правил: $SUB$$SUB$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      },
+      "param_3": {
+        "content": "$3"
+      }
+    }
+  },
+  "msg_undone_c2ac555c": {
+    "message": " · отменено",
+    "description": "User-visible text. Source:  · отменено"
+  },
+  "msg_undo_unavailable_for_a_large_batch_2a4e0aca": {
+    "message": " · отмена недоступна для большого пакета",
+    "description": "User-visible text. Source:  · отмена недоступна для большого пакета"
+  },
+  "msg_undone_23a2a9bf": {
+    "message": "Отменено",
+    "description": "User-visible text. Source: Отменено"
+  },
+  "msg_undo_7c47f729": {
+    "message": "Отменить",
+    "description": "User-visible text. Source: Отменить"
+  },
+  "msg_restored_sub_later_edits_retained_sub_2419a5d4": {
+    "message": "Восстановлено: $param_1$. Последующих правок сохранено: $param_2$.",
+    "description": "User-visible text. Source: Восстановлено: $SUB$. Последующих правок сохранено: $SUB$.",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      },
+      "param_2": {
+        "content": "$2"
+      }
+    }
+  },
+  "msg_automatic_353cf589": {
+    "message": "Автоматически",
+    "description": "User-visible text. Source: Автоматически"
+  },
+  "msg_for_this_site_810aa684": {
+    "message": "Для сайта",
+    "description": "User-visible text. Source: Для сайта"
+  },
+  "msg_from_a_file_4d212eef": {
+    "message": "Из файла",
+    "description": "User-visible text. Source: Из файла"
+  },
+  "msg_manual_3e17d77f": {
+    "message": "Вручную",
+    "description": "User-visible text. Source: Вручную"
+  },
+  "msg_after_undo_9d1dd80d": {
+    "message": "После отмены",
+    "description": "User-visible text. Source: После отмены"
+  },
+  "msg_previously_saved_f1a20268": {
+    "message": "Ранее сохранено",
+    "description": "User-visible text. Source: Ранее сохранено"
+  },
+  "msg_the_list_is_empty_b6009443": {
+    "message": "Список пуст",
+    "description": "User-visible text. Source: Список пуст"
+  },
+  "msg_enter_a_domain_above_or_import_a_txt_file_0365a156": {
+    "message": "Введите домен выше или загрузите файл (.txt)",
+    "description": "User-visible text. Source: Введите домен выше или загрузите файл (.txt)"
+  },
+  "msg_no_custom_proxies_added_96a8dc56": {
+    "message": "Свои прокси не добавлены",
+    "description": "User-visible text. Source: Свои прокси не добавлены"
+  },
+  "msg_proxy_https_sites_only_7d875463": {
+    "message": "проксировать только HTTPS-сайты",
+    "description": "User-visible text. Source: проксировать только HTTPS-сайты"
+  },
+
+  "msg_exceptions_allowlist_and_pac_routing_rules_f538afa0": {
+    "message": "Исключения, белый список и правила маршрутизации PAC",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_import_domains_from_a_text_file_txt_one_domai_d845449c": {
+    "message": "Загрузить домены из текстового файла (.txt, один домен на строку)",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_export_the_current_site_list_to_a_txt_file_00f8aa40": {
+    "message": "Экспортировать текущий список сайтов в файл .txt",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_autosave_c04c99b6": {
+    "message": "✓ Автосохранение",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_history_and_undo_881d5b0b": {
+    "message": "История и отмена",
+    "description": "Static interface text or accessible attribute."
+  },
+
+
+
+  "msg_add_a_domain_e_g_rutracker_org_or_domain_com_760e587b": {
+    "message": "Добавить домен (напр. rutracker.org или *.domain.com)",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_add_e188c252": {
+    "message": "+ Добавить",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_all_sources_71e214e1": {
+    "message": "Все источники",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_clear_the_domain_list_in_the_current_tab_c93a495d": {
+    "message": "Очистить список доменов текущей вкладки",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_text_editor_format_b2033128": {
+    "message": "Формат текстового редактора:",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_proxy_site_list_e4ff0567": {
+    "message": "Список проксируемых сайтов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_separator_5b64c280": {
+    "message": "разделитель",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_exception_list_b338bd0b": {
+    "message": "список исключений",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_allowlist_c4b551a6": {
+    "message": "белый список.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_unroute_settings_24ddcbd6": {
+    "message": "Unroute — Настройки",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_settings_sections_2d73b4c3": {
+    "message": "Разделы настроек",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_sites_54646f9a": {
+    "message": "Сайты",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_proxies_a567776c": {
+    "message": "Прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_options_4770aec1": {
+    "message": "Опции",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_test_eae4c06a": {
+    "message": "Тест",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_history_1417b779": {
+    "message": "История",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_the_last_12_changes_undo_retains_later_manual_dc13d9c9": {
+    "message": "Последние 5 изменений. Отмена сохраняет последующие ручные правки. Для пакетов свыше 50 000 правил сохраняется только сводка.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_clear_history_3f70f0ad": {
+    "message": "Очистить историю",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_one_or_more_of_your_proxy_servers_are_unavail_6a46dee9": {
+    "message": "Один или несколько ваших прокси-серверов недоступны. Проверьте вкладку «Прокси».",
+    "description": "Static interface text or accessible attribute."
+  },
+
+
+  "msg_antizapret_6b16551e": {
+    "message": "Антизапрет",
+    "description": "Static interface text or accessible attribute."
+  },
+
+
+  "msg_updated_loading_44703b2a": {
+    "message": "Обновлён: загрузка…",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_anticensority_35622eb9": {
+    "message": "Антицензорити",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_only_your_sites_tor_proxy_e8d0d2ff": {
+    "message": "Только свои сайты (Tor / Прокси)",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_only_manually_added_exceptions_are_routed_thr_72f90680": {
+    "message": "Проксируются только вручную добавленные сайты через ваши рабочие прокси.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_a_ready_to_use_pac_script_at_your_own_direct__9ec603da": {
+    "message": "Готовый PAC-скрипт по собственной прямой ссылке (HTTPS или HTTP).",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_disable_extension_732a2462": {
+    "message": "Отключить расширение",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_temporarily_release_browser_proxy_settings_85c90893": {
+    "message": "Временно освобождает настройки прокси в браузере.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_your_pac_script_url_9d761e35": {
+    "message": "Адрес вашего PAC-скрипта",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_direct_url_to_a_pac_file_https_or_http_only_o_079ad599": {
+    "message": "Прямая ссылка на готовый .pac-файл (HTTPS или HTTP только на этом компьютере).",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_last_update_c94eb824": {
+    "message": "Обновление",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_loading_4483b08e": {
+    "message": "Загрузка...",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_update_603e460b": {
+    "message": "Обновить",
+    "description": "Static interface text or accessible attribute."
+  },
+
+
+  "msg_the_proxy_is_checked_for_availability_before__c9f6c13f": {
+    "message": "Прокси автоматически проверяется на доступность перед добавлением.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_protocol_b3680d4b": {
+    "message": "Протокол",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_server_address_4289b171": {
+    "message": "Адрес сервера",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_127_0_0_1_or_proxy_example_com_dcd27499": {
+    "message": "127.0.0.1 или proxy.example.com",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_port_90947197": {
+    "message": "Порт",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_authentication_required_username_and_password_d712edbc": {
+    "message": "Требуется авторизация (логин и пароль)",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_username_5be12bfe": {
+    "message": "Логин",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_password_cb1a2074": {
+    "message": "Пароль",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_chromium_and_firefox_proxy_apis_do_not_suppor_b26b763a": {
+    "message": "Браузерные API Chromium и Firefox не поддерживают ввод логина и пароля для SOCKS4/SOCKS5. Используйте SOCKS без авторизации либо HTTP/HTTPS-прокси.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_configured_proxies_e037b435": {
+    "message": "Настроенные прокси:",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_check_all_proxies_for_availability_f5570db5": {
+    "message": "Проверить доступность всех прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_check_all_48f59aac": {
+    "message": "Проверить все",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_your_proxy_list_97f390fb": {
+    "message": "Список своих прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_examples_http_127_0_0_1_8080_https_user_pass__f4fabb50": {
+    "message": "Примеры:\nHTTP 127.0.0.1:8080\nHTTPS user:pass@proxy.net:443\nSOCKS5 127.0.0.1:1080",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_advanced_settings_e0e021a0": {
+    "message": "Дополнительные параметры",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_your_proxies_only_for_your_sites_b8d9f229": {
+    "message": "Свои прокси только для своих сайтов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_use_your_proxies_only_for_exceptions_54d6cf55": {
+    "message": "Использовать свои прокси только для сайтов, добавленных вручную",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_adjust_pac_script_rules_and_routing_modes_bb77b21c": {
+    "message": "Тонкая настройка правил и режимов работы PAC-скрипта.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_https_only_d783beb6": {
+    "message": "Только HTTPS",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_only_proxy_encrypted_sites_992e9e6a": {
+    "message": "Проксировать только зашифрованные сайты",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_encrypted_connection_to_proxy_4a5a4a3f": {
+    "message": "Шифрованная связь до прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_only_use_https_tor_transport_0e5d2a76": {
+    "message": "Использовать только HTTPS/Tor транспорт",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_disable_dns_in_pac_71cd069a": {
+    "message": "Запретить DNS в PAC",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_disable_dnsresolve_to_reduce_lookups_de340e19": {
+    "message": "Отключает dnsResolve() для ускорения",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_proxy_or_fail_07ac9e3a": {
+    "message": "Проксируй или умри!",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_prevent_direct_connections_when_the_proxy_fai_d6445a44": {
+    "message": "Запрещает прямое соединение при сбое прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_onion_i2p_and_opennic_domains_87d2d453": {
+    "message": "Зоны .onion, .i2p, OpenNIC",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_proxy_special_domain_zones_c3a26b8f": {
+    "message": "Проксировать особые доменные зоны",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_choose_which_desktop_notifications_to_receive_0fe46371": {
+    "message": "Настройка оповещений на рабочем столе.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_pac_script_errors_fe7ef901": {
+    "message": "Ошибки PAC-скриптов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_notify_about_proxy_server_failures_47a860dd": {
+    "message": "Оповещать при сбоях прокси-серверов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_extension_errors_5c72f461": {
+    "message": "Ошибки расширения",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_notify_about_unexpected_errors_a055e504": {
+    "message": "Оповещать о непредвиденных ошибках",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_lost_proxy_control_e2f1e582": {
+    "message": "Утеря контроля прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_notify_when_another_extension_changes_proxy_s_820ae2e1": {
+    "message": "Оповещать, если другое расширение сменило прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_network_pac_and_proxy_errors_2bba0d9a": {
+    "message": "Фиксация сетевых сбоев, ошибок PAC и прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_0_entries_166c5ae1": {
+    "message": "0 записей",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_all_215816bf": {
+    "message": "Все",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_network_8006cb7a": {
+    "message": "Сеть",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_system_6da215b1": {
+    "message": "Система",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_search_errors_domains_urls_f7d451a7": {
+    "message": "Поиск по ошибкам, доменам, URL...",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_clear_search_6e1f7baa": {
+    "message": "Очистить поиск",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_refresh_the_log_b274f318": {
+    "message": "Обновить список логов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_copy_all_log_entries_to_the_clipboard_aa89a048": {
+    "message": "Скопировать все логи в буфер обмена",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_copy_1ecddf40": {
+    "message": "Копировать",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_download_log_entries_as_a_text_file_5867f34f": {
+    "message": "Скачать логи в текстовый файл",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_export_d2ab5a1b": {
+    "message": "Экспорт",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_clear_the_log_ee571f21": {
+    "message": "Очистить журнал логов",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_clear_8965271d": {
+    "message": "Очистить",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_no_errors_recorded_8f9681c7": {
+    "message": "Ошибок не зафиксировано",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_check_your_connection_and_reset_settings_9d9c231f": {
+    "message": "Проверка состояния соединения и сброс настроек.",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_connection_check_f00dcb8e": {
+    "message": "Проверка связи",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_check_the_connection_to_the_pac_server_c32752de": {
+    "message": "Проверяет связь с PAC-сервером",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_pac_script_source_eaf7c946": {
+    "message": "Код PAC-скрипта",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_inspect_the_active_pac_source_f25f4125": {
+    "message": "Инспектор активного кода PAC",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_source_1b3a63b2": {
+    "message": "Код",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_reset_everything_d449496d": {
+    "message": "Сбросить всё",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_restore_default_settings_bd1fb21c": {
+    "message": "Сброс к заводским настройкам",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_reset_14b4afa6": {
+    "message": "Сброс",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_loading_db491ef5": {
+    "message": "Загрузка…",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_try_loading_again_298e4132": {
+    "message": "Повторить загрузку",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_current_site_72720638": {
+    "message": "Текущий сайт",
+    "description": "Static interface text or accessible attribute."
+  },
+
+  "msg_set_up_proxy_0e25684e": {
+    "message": "Настроить прокси",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_site_resources_d05fe24e": {
+    "message": "Ресурсы сайта",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_open_a_website_bb2e677c": {
+    "message": "Откройте сайт",
+    "description": "Static interface text or accessible attribute."
+  },
+  "msg_quick_actions_are_available_on_regular_pages__016fd7f1": {
+    "message": "Быстрые действия доступны на обычных страницах с доменным именем.",
+    "description": "Static interface text or accessible attribute."
+  },
+
+
+
+
+  "uiLanguage": {
+    "message": "ru",
+    "description": "Language of this message catalog, for document language and locale fallback."
+  },
+  "firefoxUnsupportedProxySetting": {
+    "message": "Firefox не поддерживает proxy.settings.$method$()",
+    "description": "Firefox setup and private-window permission.",
+    "placeholders": {
+      "method": {
+        "content": "$1"
+      }
+    }
+  },
+  "firefoxPrivateBrowsingRequired": {
+    "message": "Firefox требует разрешить расширению работу в приватных окнах, поскольку настройка PAC действует на весь профиль браузера.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxManagementUnavailable": {
+    "message": "Firefox не предоставил доступ к странице управления расширением",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxBlobUnavailable": {
+    "message": "Firefox не предоставил Blob URL API для применения PAC-скрипта",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionCheckFailed": {
+    "message": "Не удалось проверить разрешение.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionAllowed": {
+    "message": "✓ Работа в приватных окнах уже разрешена.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionDenied": {
+    "message": "Разрешение пока не выдано.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionTitle": {
+    "message": "Разрешение приватных окон",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionHeading": {
+    "message": "Разрешите работу в приватных окнах",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionExplanation": {
+    "message": "Firefox применяет PAC ко всему профилю, поэтому без этого разрешения Unroute не может безопасно изменить настройки прокси.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionStepDetails": {
+    "message": "В карточке расширения выше откройте вкладку «Подробности».",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionStepPrivate": {
+    "message": "Найдите пункт «Работа в приватных окнах».",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionStepAllow": {
+    "message": "Выберите «Разрешить».",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionChecking": {
+    "message": "Проверяем текущее разрешение…",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxPermissionNextStep": {
+    "message": "После выдачи разрешения снова откройте Unroute и примените PAC-скрипт.",
+    "description": "Firefox setup and private-window permission."
+  },
+  "firefoxOpenExtension": {
+    "message": "Открыть Unroute",
+    "description": "Firefox setup and private-window permission."
+  },
+  "sitesRetryLoad": {
+    "message": "Повторить загрузку"
+  },
+  "sitesAddDomain": {
+    "message": "Добавить домен"
+  },
+  "sitesSearch": {
+    "message": "Поиск по списку"
+  },
+  "sitesRawEditor": {
+    "message": "Списки сайтов в текстовом формате"
+  },
+  "proxyAddedRefreshFailed": {
+    "message": "Прокси добавлен, но не удалось обновить его состояние. Обновите страницу настроек."
+  },
+  "proxyAddFailed": {
+    "message": "Не удалось добавить прокси: $param_1$",
+    "placeholders": {
+      "param_1": {
+        "content": "$1"
+      }
+    }
+  },
+  "badgeApplyError": {
+    "message": "Unroute — ошибка применения настроек. Откройте расширение."
+  },
+  "badgeModeHint": {
+    "message": "Значок показывает выбранный режим сайта. Для отдельных ресурсов могут действовать свои правила и ограничения."
+  },
+  "settings_help_nav_pac": {"message": "Выбрать источник правил и обновить PAC."},
+  "settings_help_nav_exceptions": {"message": "Настроить маршруты и исключения для сайтов."},
+  "settings_help_nav_proxies": {"message": "Добавить прокси и выбрать маршрут по умолчанию."},
+  "settings_help_nav_mods": {"message": "Изменить ограничения маршрутизации PAC."},
+  "settings_help_nav_logs": {"message": "Просмотреть ошибки сети, PAC и прокси."},
+  "settings_help_nav_history": {"message": "Просмотреть изменения правил и отменить доступные операции."},
+  "settings_help_nav_tools": {"message": "Открыть диагностику, код PAC и сброс настроек."},
+  "settings_help_nav_notifications": {"message": "Выбрать уведомления об ошибках и потере контроля."},
+  "settings_help_nav_appearance": {"message": "Настроить тему и акцентный цвет интерфейса."},
+  "settings_help_provider_az": {"message": "Использовать правила Антизапрета для обхода блокировок."},
+  "settings_help_provider_ac": {"message": "Использовать расширенную базу правил Антицензорити."},
+  "settings_help_provider_own": {"message": "Проксировать только вручную добавленные сайты."},
+  "settings_help_provider_custom": {"message": "Использовать PAC-скрипт по вашей ссылке."},
+  "settings_help_provider_none": {"message": "Освободить настройки прокси браузера, отключив расширение."},
+  "settings_help_pac_url": {"message": "Введите ссылку на готовый PAC-скрипт."},
+  "settings_help_pac_apply": {"message": "Сохранить ссылку и применить выбранный PAC."},
+  "settings_help_pac_update": {"message": "Заново загрузить правила выбранного PAC-провайдера."},
+  "settings_help_history_clear": {"message": "Удалить записи истории без изменения текущих правил."},
+  "settings_help_history_undo": {"message": "Отменить это изменение, сохранив последующие ручные правки."},
+  "settings_help_import": {"message": "Добавить домены из .txt в текущий список."},
+  "settings_help_dl_back": {"message": "Вернуться к листам, сохранив изменения редактора."},
+  "settings_help_dl_manual": {"message": "Открыть ручные правила, которые имеют приоритет над листами."},
+  "settings_help_dl_add": {"message": "Создать отдельный пустой лист с одним назначенным прокси."},
+  "settings_help_dl_import": {"message": "Создать новый независимый лист из файла UTF-8 .txt."},
+  "settings_help_dl_name": {"message": "Название листа: от 1 до 64 символов."},
+  "settings_help_dl_proxy": {"message": "Назначить один доступный профиль прокси всему листу."},
+  "settings_help_dl_file": {"message": "Загрузить домены из UTF-8 .txt, по одному в строке, до 5 МБ."},
+  "settings_help_dl_save": {"message": "Сохранить изменения листа после проверки данных."},
+  "settings_help_dl_cancel": {"message": "Закрыть форму или подтверждение без изменения листа."},
+  "settings_help_dl_open": {"message": "Открыть редактор доменов только этого листа."},
+  "settings_help_dl_drag": {"message": "Перетащить лист для смены приоритета. Alt + ↑/↓ — с клавиатуры; Esc — отменить перетаскивание."},
+  "dlDragFor": {"message": "Переместить лист «$1»"},
+  "dlDomainsCount": {"message": "Домены: $1"},
+  "dlDragHint": {"message": "Перетаскивайте за ручку слева · Alt + ↑/↓ для клавиатуры"},
+  "dlOrderSaved": {"message": "Порядок сохранён. Позиция $1 из $2."},
+  "dlOrderCancelled": {"message": "Перемещение отменено. Порядок не изменён."},
+  "settings_help_dl_enabled": {"message": "Включить или исключить лист из маршрутизации, не удаляя домены."},
+  "settings_help_dl_up": {"message": "Поднять лист: первый включённый совпавший лист имеет приоритет."},
+  "settings_help_dl_down": {"message": "Опустить лист ниже в порядке приоритета."},
+  "settings_help_dl_rename": {"message": "Изменить название листа, сохранив его домены и прокси."},
+  "settings_help_dl_delete": {"message": "Удалить только этот лист после подтверждения; другие листы и ручные правила сохранятся."},
+  "settings_help_dl_confirm": {"message": "Подтвердить действие, показанное в этом окне."},
+  "settings_help_dl_pac": {"message": "Показать ручные PAC-исключения, которые обходят пользовательские листы."},
+  "settings_help_dl_bulk_delete": {"message": "Удалить отмеченные домены только из этого листа."},
+  "settings_help_dl_replace": {"message": "Заменить домены только этого листа из .txt после просмотра и подтверждения."},
+  "settings_help_dl_raw": {"message": "Редактировать домены только этого листа; изменения сохраняются автоматически."},
+  "settings_help_dl_select": {"message": "Отметить домен для удаления из этого листа."},
+  "settings_help_export": {"message": "Скачать домены текущего списка в формате .txt."},
+  "settings_help_site_mode": {"message": "Переключить списки сайтов между карточками и текстом."},
+  "settings_help_site_retry": {"message": "Повторить чтение списков после ошибки загрузки."},
+  "settings_help_site_target": {"message": "Выбрать прокси для новых сайтов и импорта."},
+  "settings_help_list_proxy": {"message": "Показать сайты с принудительным маршрутом через прокси."},
+  "settings_help_list_direct": {"message": "Показать сайты с прямым соединением без прокси."},
+  "settings_help_list_white": {"message": "Показать домены белого списка."},
+  "settings_help_site_input": {"message": "Введите домен или маску для добавления в текущий список."},
+  "settings_help_site_add": {"message": "Сохранить введённый домен в текущем списке правил."},
+  "settings_help_site_search": {"message": "Отфильтровать текущий список по части домена."},
+  "settings_help_site_proxy_filter": {"message": "Показать сайты с выбранным назначением прокси."},
+  "settings_help_site_source_filter": {"message": "Отфильтровать правила по способу их добавления."},
+  "settings_help_site_clear": {"message": "Удалить все правила текущего списка после подтверждения."},
+  "settings_help_site_select_all": {"message": "Выбрать или снять выбор всех найденных сайтов, включая ещё не показанные."},
+  "settings_help_site_bulk_target": {"message": "Выбрать новый прокси для отмеченных сайтов."},
+  "settings_help_site_bulk": {"message": "Назначить выбранный прокси всем отмеченным сайтам."},
+  "settings_help_site_deselect": {"message": "Снять отметки со всех выбранных сайтов."},
+  "settings_help_site_select": {"message": "Включить сайт в выбор для массового переноса."},
+  "settings_help_site_assign": {"message": "Изменить прокси, назначенный только этому сайту."},
+  "settings_help_site_delete": {"message": "Удалить правило сайта из текущего списка."},
+  "settings_help_site_raw": {"message": "Редактировать три списка; изменения сохраняются автоматически."},
+  "settings_help_site_raw_retry": {"message": "Обновить ревизию правил и повторить сохранение вашего текста."},
+  "settings_help_proxy_mode": {"message": "Переключить редактор прокси между формой и текстом."},
+  "settings_help_proxy_default": {"message": "Назначить прокси по умолчанию для новых сайтов."},
+  "settings_help_proxy_name": {"message": "Название прокси: до 32 символов, без изменения адреса. В закрытых селекторах popup показано до 6 символов; полное имя — в списке и подсказке."},
+  "settings_help_proxy_protocol": {"message": "Выбрать протокол соединения с прокси-сервером."},
+  "settings_help_proxy_host": {"message": "Введите имя хоста или IP-адрес прокси-сервера."},
+  "settings_help_proxy_port": {"message": "Введите порт, на котором прокси принимает соединения."},
+  "settings_help_proxy_auth": {"message": "Включить ввод логина и пароля для HTTP/HTTPS-прокси."},
+  "settings_help_proxy_user": {"message": "Введите имя пользователя для авторизации на прокси."},
+  "settings_help_proxy_pass": {"message": "Введите пароль для авторизации на прокси."},
+  "settings_help_proxy_add": {"message": "Проверить доступность и сохранить новый прокси."},
+  "settings_help_proxy_check_all": {"message": "Повторно проверить доступность настроенных прокси."},
+  "settings_help_proxy_check": {"message": "Повторно проверить доступность этого прокси."},
+  "settings_help_proxy_rename": {"message": "Открыть редактор названия этого прокси."},
+  "settings_help_proxy_delete": {"message": "Выбрать замену и подготовить удаление этого прокси."},
+  "settings_help_proxy_replace": {"message": "Выбрать прокси, на который будут перенесены зависимые сайты."},
+  "settings_help_proxy_submit": {"message": "Применить переименование или удаление с выбранной заменой."},
+  "settings_help_proxy_cancel": {"message": "Закрыть редактор без сохранения изменений прокси."},
+  "settings_help_proxy_raw": {"message": "Редактировать список прокси; сохранение — кнопкой «Применить»."},
+  "settings_help_proxy_save": {"message": "Сохранить изменения текстового списка прокси."},
+  "settings_help_tor": {"message": "Добавить локальный Tor в доступные прокси."},
+  "settings_help_warp": {"message": "Добавить локальный Cloudflare WARP в доступные прокси."},
+  "settings_help_advanced": {"message": "Развернуть или свернуть дополнительные ограничения прокси."},
+  "settings_help_own_only": {"message": "Использовать свои прокси только для вручную добавленных сайтов."},
+  "settings_help_https": {"message": "Не направлять HTTP-сайты через прокси."},
+  "settings_help_secure": {"message": "Ограничить цепочку прокси защищёнными транспортами."},
+  "settings_help_dns": {"message": "Запретить DNS-запросы из PAC-скрипта."},
+  "settings_help_fail_closed": {"message": "Не переходить на прямое соединение при сбое прокси."},
+  "settings_help_special": {"message": "Направлять особые доменные зоны через прокси."},
+  "settings_help_notify_pac": {"message": "Показывать уведомления об ошибках PAC."},
+  "settings_help_notify_ext": {"message": "Показывать уведомления об ошибках расширения."},
+  "settings_help_notify_control": {"message": "Сообщать о потере контроля над настройками прокси."},
+  "settings_help_logs_all": {"message": "Показать записи всех категорий журнала."},
+  "settings_help_logs_network": {"message": "Показать только сетевые ошибки."},
+  "settings_help_logs_proxy": {"message": "Показать только события прокси."},
+  "settings_help_logs_pac": {"message": "Показать только события PAC-скрипта."},
+  "settings_help_logs_auth": {"message": "Показать только события авторизации."},
+  "settings_help_logs_system": {"message": "Показать только системные события."},
+  "settings_help_logs_search": {"message": "Найти записи журнала по тексту ошибки, домену или URL."},
+  "settings_help_logs_search_clear": {"message": "Убрать поисковый запрос и снова показать записи категории."},
+  "settings_help_logs_refresh": {"message": "Заново прочитать записи журнала."},
+  "settings_help_logs_copy": {"message": "Скопировать журнал в буфер обмена."},
+  "settings_help_logs_export": {"message": "Скачать журнал в текстовый файл."},
+  "settings_help_logs_clear": {"message": "Удалить сохранённые записи журнала после подтверждения."},
+  "settings_help_log_copy": {"message": "Скопировать текст и подробности этой записи журнала."},
+  "settings_help_log_expand": {"message": "Показать или скрыть подробности этой записи."},
+  "settings_help_test": {"message": "Проверить связь с PAC-сервером и показать задержку."},
+
+  "settings_help_source": {"message": "Открыть код установленного PAC или предпросмотр настроек."},
+  "settings_help_reset": {"message": "Вернуть исходные настройки после подтверждения."},
+  "settings_help_close": {"message": "Закрыть просмотр кода PAC без изменения настроек."},
+  "settings_help_theme": {"message": "Выбрать светлую, тёмную или системную тему."},
+  "settings_help_accent": {"message": "Применить этот акцентный цвет интерфейса."},
+  "settings_help_color": {"message": "Выбрать свой акцентный цвет в палитре."},
+  "settings_help_hex": {"message": "Задать свой акцентный цвет кодом #RGB или #RRGGBB."},
+  "settings_help_appearance_retry": {"message": "Повторить сохранение выбранного оформления в браузере."},
+  "settings_help_apply_retry": {"message": "Повторить применение сохранённых настроек браузером."},
+  "settings_help_private": {"message": "Открыть настройки разрешения работы в приватных окнах Firefox."}
+}

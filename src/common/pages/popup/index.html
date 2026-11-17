@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title data-i18n="msg_unroute_494f900b">Unroute</title><link rel="stylesheet" href="style.css"><link rel="icon" href="../../icons/default-32.png"></head>
+<body>
+  <header><div class="brand"><img src="../../icons/default-128.png" alt=""><span data-i18n="msg_unroute_494f900b">Unroute</span><span id="version" hidden></span></div><span class="status" id="status" title="Состояние расширения. Подключение сайта выбирается ниже." data-i18n-title="popupExtensionStatusHelp"><span data-i18n="msg_loading_db491ef5">Загрузка…</span></span></header>
+  <main>
+    <div class="pending" id="applicationBanner" role="status" hidden></div>
+    <div class="load-error" id="loadError" hidden><p id="loadErrorText" role="status"></p><button id="retryLoad"><span data-i18n="msg_try_loading_again_298e4132">Повторить загрузку</span></button></div>
+    <section class="site-card" id="siteCard" hidden>
+      <div class="eyebrow"><span data-i18n="msg_current_site_72720638">Текущий сайт</span></div>
+      <div class="site-heading"><span class="site-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18"/></svg></span><h1 id="domain"></h1></div>
+      <div class="site-connection" id="modeSwitch" role="group" aria-labelledby="siteConnectionLabel" aria-describedby="actionScope"><label id="siteConnectionLabel" for="siteRoute" data-i18n="popupSiteConnection">Подключение сайта</label><span id="siteProxyWrap" class="site-proxy-wrap" hidden></span></div>
+      <p id="route" hidden></p>
+      <p id="actionScope" class="action-scope" hidden></p>
+
+      <div id="connectionHelp" class="connection-help" hidden><p id="connectionHint"></p><button id="connectionSettings" data-section="proxies"><span data-i18n="msg_set_up_proxy_0e25684e">Настроить прокси</span></button></div>
+      <div class="resource-inheritance" id="resourceMode"><span id="inheritResourcesLabel" data-i18n="popupResourcesLabel">Автоматические ресурсы</span><div class="resource-mode-switch" role="radiogroup" aria-labelledby="inheritResourcesLabel" aria-describedby="resourcePolicyHint"><input id="inheritResources" name="resourceMode" type="radio" value="inherit" checked><label for="inheritResources" data-i18n="popupResourcesFollow">Как у сайта</label><input id="directResources" name="resourceMode" type="radio" value="direct"><label for="directResources" data-i18n="popupWithoutProxy">Без прокси</label></div><p id="resourcePolicyHint" class="resource-policy-hint" data-i18n="popupManualExceptionsKeep">Ручные исключения сохраняются.</p></div>
+      <p id="notice" role="status" aria-live="polite" hidden></p>
+      <div class="change-feedback" id="reloadRow" hidden><span id="saveState" data-i18n="popupChangesSaved">Изменения сохранены</span><button class="reload" id="reload" hidden aria-label="Перезагрузить текущий сайт" data-i18n-aria-label="popupReloadLabel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10a8 8 0 1 0-2 8M20 4v6h-6"/></svg><span data-i18n="popupReloadShort">Перезагрузить</span></button></div>
+      <details id="resourceDetails"><summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg><span data-i18n="msg_site_resources_d05fe24e">Ресурсы сайта</span><small id="resourceCount" class="resource-count">0</small></summary><p id="resourcesEmpty" class="muted" hidden></p><ul id="resources"></ul><p id="source" class="muted" hidden></p><p class="muted" id="scope" hidden></p></details>
+    </section>
+    <section class="empty" id="empty" hidden><h1><span data-i18n="msg_open_a_website_bb2e677c">Откройте сайт</span></h1><p><span data-i18n="msg_quick_actions_are_available_on_regular_pages__016fd7f1">Быстрые действия доступны на обычных страницах с доменным именем.</span></p></section>
+
+  </main>
+  <footer><button class="ghost" data-section="pac"><span data-i18n="fidelity_connection">Подключение</span></button><button class="ghost settings" data-section="exceptions"><span class="settings-label" data-i18n="fidelity_settings">Настройки</span><svg class="settings-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button></footer>
+  <script type="module" src="app.js"></script>
+</body></html>

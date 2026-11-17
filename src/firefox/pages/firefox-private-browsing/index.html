@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title data-i18n="firefoxPermissionTitle">Разрешение приватных окон</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="../../icons/default-32.png">
+</head>
+<body>
+  <main>
+    <div class="permission-brand"><img src="../../icons/default-128.png" alt=""><span data-i18n="msg_unroute_494f900b">Unroute</span></div>
+    <h1 data-i18n="firefoxPermissionHeading">Разрешите работу в приватных окнах</h1>
+    <p data-i18n="firefoxPermissionExplanation">
+      Firefox применяет PAC ко всему профилю, поэтому без этого разрешения
+      Unroute не может безопасно изменить настройки прокси.
+    </p>
+    <ol>
+      <li data-i18n="firefoxPermissionStepDetails">В карточке расширения выше откройте вкладку «Подробности».</li>
+      <li data-i18n="firefoxPermissionStepPrivate">Найдите пункт «Работа в приватных окнах».</li>
+      <li data-i18n="firefoxPermissionStepAllow">Выберите «Разрешить».</li>
+    </ol>
+    <p id="permissionStatus" class="status" data-i18n="firefoxPermissionChecking">Проверяем текущее разрешение…</p>
+    <p class="hint" data-i18n="firefoxPermissionNextStep">
+      После выдачи разрешения снова откройте Unroute и примените PAC-скрипт.
+    </p>
+    <button id="openExtensionSettings" type="button" data-i18n="firefoxOpenExtension">Открыть Unroute</button>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

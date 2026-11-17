@@ -39,32 +39,26 @@ if (!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(canonical)) {
 }
 
 const changed = [];
-const nestedRoot = 'extensions/browser/runet-censorship-bypass';
-
-if (updateJson(`${nestedRoot}/package.json`, (pkg) => { pkg.version = canonical; })) {
-  changed.push(`${nestedRoot}/package.json`);
-}
-if (updateJson(`${nestedRoot}/package-lock.json`, (lock) => {
+if (updateJson('package-lock.json', (lock) => {
   lock.version = canonical;
   if (lock.packages?.['']) lock.packages[''].version = canonical;
-  if (lock.packages?.['../../..']) lock.packages['../../..'].version = canonical;
 })) {
-  changed.push(`${nestedRoot}/package-lock.json`);
+  changed.push('package-lock.json');
 }
-if (updateJson(`${nestedRoot}/src/extension-common/manifest.json`, (manifest) => {
+if (updateJson('src/common/manifest.json', (manifest) => {
   manifest.version = canonical;
 })) {
-  changed.push(`${nestedRoot}/src/extension-common/manifest.json`);
+  changed.push('src/common/manifest.json');
 }
-if (updateJson(`${nestedRoot}/src/extension-firefox/manifest.json`, (manifest) => {
+if (updateJson('src/firefox/manifest.json', (manifest) => {
   manifest.version = canonical;
 })) {
-  changed.push(`${nestedRoot}/src/extension-firefox/manifest.json`);
+  changed.push('src/firefox/manifest.json');
 }
 // Reviewer source archives and clean source trees have no generated build yet.
 // Check/update generated manifests when present; the build creates them from src.
 for (const target of ['chromium', 'firefox']) {
-  const manifestPath = `${nestedRoot}/build/extension-${target}/manifest.json`;
+  const manifestPath = `dist/${target}/manifest.json`;
   if (fs.existsSync(path.join(repoRoot, manifestPath)) && updateJson(manifestPath, (manifest) => {
     manifest.version = canonical;
   })) {
@@ -75,11 +69,11 @@ for (const target of ['chromium', 'firefox']) {
 const readmePath = 'README.md';
 const readme = read(readmePath);
 const updatedReadme = readme.replace(
-  /version-\d+\.\d+\.\d+(?:\.\d+)?-blue/,
-  `version-${canonical}-blue`
+  /^Версия: \*\*\d+\.\d+\.\d+(?:\.\d+)?\*\*/m,
+  `Версия: **${canonical}**`
 );
-if (updatedReadme === readme && !readme.includes(`version-${canonical}-blue`)) {
-  throw new Error('В README.md не найден бейдж версии');
+if (updatedReadme === readme && !readme.includes(`Версия: **${canonical}**`)) {
+  throw new Error('В README.md не найдена строка версии');
 }
 if (write(readmePath, updatedReadme)) changed.push(readmePath);
 

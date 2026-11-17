@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="msg_unroute_settings_24ddcbd6">Unroute — Настройки</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="sites-editor.css">
+  <link rel="stylesheet" href="../shared/appearance.css">
+  <link rel="icon" href="../../icons/default-32.png">
+</head>
+
+<body>
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <img class="brand-logo" src="../../icons/default-128.png" alt="">
+      <div>
+        <div class="brand-title">
+          <span data-i18n="msg_unroute_494f900b">Unroute</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <div class="status-pill active" id="headerStatus">
+        <span class="status-dot"></span>
+        <span id="statusText"><span data-i18n="msg_working_0232a305">Работает</span></span>
+      </div>
+    </div>
+  </header>
+  <div id="applicationBanner" class="application-banner" role="status" hidden></div>
+
+  <!-- Settings navigation -->
+  <nav class="nav-tabs" aria-label="Разделы настроек" data-i18n-aria-label="msg_settings_sections_2d73b4c3">
+    <button class="nav-tab-btn" data-tab="pac"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v8a4 4 0 0 0 4 4h8M7 5h8a4 4 0 0 1 4 4v4"/></svg><span data-i18n="fidelity_connection">Подключение</span></button>
+<button class="nav-tab-btn active" data-tab="exceptions"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18"/></svg><span data-i18n="msg_sites_54646f9a">Сайты</span></button>
+<button class="nav-tab-btn" data-tab="proxies"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v5m8-5v5M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v3"/></svg><span data-i18n="msg_proxies_a567776c">Прокси</span></button>
+<button class="nav-tab-btn" data-tab="mods"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/></svg><span data-i18n="msg_options_4770aec1">Опции</span></button>
+    <div class="nav-separator" role="separator"></div>
+<button class="nav-tab-btn" data-tab="logs"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span data-i18n="fidelity_logs">Журнал</span> <span class="nav-tab-badge" id="logsNavBadge"
+        style="display: none;">0</span></button>
+<button class="nav-tab-btn" data-tab="history"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="msg_history_1417b779">История</span></button>
+<button class="nav-tab-btn" data-tab="tools"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span data-i18n="fidelity_check">Проверка</span></button>
+<button class="nav-tab-btn" data-tab="notifications"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg><span data-i18n="fidelity_information">Информация</span></button>
+<button class="nav-tab-btn" data-tab="appearance"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h2a4 4 0 0 0 4-4c0-3-4-6-9-6Z"/><path d="M7 10h.01M10 7h.01M15 7h.01"/></svg><span data-i18n="appearance_title">Оформление</span></button>
+
+  </nav>
+
+  <section class="tab-content" id="tab-appearance">
+    <div class="card" id="appearanceSettings"></div>
+  </section>
+
+  <section class="tab-content" id="tab-history">
+    <div class="card"><div class="card-title"><span data-i18n="fidelity_history">История</span></div><div class="card-desc"><span data-i18n="msg_the_last_12_changes_undo_retains_later_manual_dc13d9c9">Последние 5 изменений. Отмена сохраняет последующие ручные правки. Для пакетов свыше 50 000 правил сохраняется только сводка.</span></div><button id="clearHistoryBtn" class="btn btn-secondary btn-sm"><span data-i18n="msg_clear_history_3f70f0ad">Очистить историю</span></button><div id="historyList" aria-live="polite"></div></div>
+  </section>
+
+  <!-- TAB 1: PAC Provider -->
+  <section class="tab-content" id="tab-pac">
+    <!-- Home Tab Warning Banner -->
+    <div id="homeProxyWarningBanner" class="alert-banner warning" style="display: none;">
+      <span></span>
+      <span id="homeProxyWarningText"><span data-i18n="msg_one_or_more_of_your_proxy_servers_are_unavail_6a46dee9">Один или несколько ваших прокси-серверов недоступны. Проверьте вкладку
+        «Прокси».</span></span>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span data-i18n="fidelity_connection">Подключение</span></div>
+      <div class="card-desc"><span data-i18n="fidelity_connection_intro">Выберите, кто определяет маршрут для сайтов.</span></div>
+
+      <div class="section-label"><span data-i18n="fidelity_rule_source">Источник правил</span></div>
+      <div class="provider-group">
+        <!-- Antizapret -->
+        <label class="provider-card selected" data-provider="Антизапрет">
+          <input type="radio" name="pacProviderRadio" class="provider-radio" checked>
+          <div class="provider-info">
+            <div class="provider-header">
+              <span class="provider-name"><span data-i18n="msg_antizapret_6b16551e">Антизапрет</span></span>
+              <span class="version-badge"><span data-i18n="fidelity_default">По умолчанию</span></span>
+            </div>
+            <div class="provider-desc"><span data-i18n="pac_provider_antizapret_description">PAC-скрипт проекта «Антизапрет».</span></div>
+            <div class="provider-update-date" data-provider-date="Антизапрет"><span data-i18n="msg_updated_loading_44703b2a">Обновлён: загрузка…</span></div>
+          </div>
+        </label>
+
+        <!-- Anticensority -->
+        <label class="provider-card" data-provider="Антицензорити">
+          <input type="radio" name="pacProviderRadio" class="provider-radio">
+          <div class="provider-info">
+            <div class="provider-header">
+              <span class="provider-name"><span data-i18n="msg_anticensority_35622eb9">Антицензорити</span></span>
+            </div>
+            <div class="provider-desc"><span data-i18n="pac_provider_anticensority_description">PAC-скрипт проекта «Антицензорити».</span></div>
+            <div class="provider-update-date" data-provider-date="Антицензорити"><span data-i18n="msg_updated_loading_44703b2a">Обновлён: загрузка…</span></div>
+          </div>
+        </label>
+
+        <!-- Only Own Sites -->
+        <label class="provider-card" data-provider="onlyOwnSites" id="onlyOwnSitesCard">
+          <input type="radio" name="pacProviderRadio" class="provider-radio">
+          <div class="provider-info">
+            <div class="provider-header">
+              <span class="provider-name"><span data-i18n="msg_only_your_sites_tor_proxy_e8d0d2ff">Только свои сайты (Tor / Прокси)</span></span>
+            </div>
+            <div class="provider-desc"><span data-i18n="msg_only_manually_added_exceptions_are_routed_thr_72f90680">Проксируются только вручную добавленные исключения через ваши рабочие прокси.</span>
+            </div>
+            <div class="provider-update-date" data-provider-date="onlyOwnSites"><span data-i18n="msg_local_rules_ff97b927">Локальные правила</span></div>
+          </div>
+        </label>
+
+        <!-- Custom PAC URL -->
+        <label class="provider-card" data-provider="customPacUrl" id="customPacUrlCard">
+          <input type="radio" name="pacProviderRadio" class="provider-radio">
+          <div class="provider-info">
+            <div class="provider-header">
+              <span class="provider-name"><span data-i18n="msg_custom_pac_url_5933ecf2">Свой PAC (по ссылке)</span></span>
+            </div>
+            <div class="provider-desc"><span data-i18n="msg_a_ready_to_use_pac_script_at_your_own_direct__9ec603da">Готовый PAC-скрипт по собственной прямой ссылке (HTTPS или HTTP).</span></div>
+            <div class="provider-update-date" data-provider-date="customPacUrl"><span data-i18n="msg_updated_loading_44703b2a">Обновлён: загрузка…</span></div>
+          </div>
+        </label>
+
+        <!-- Disable -->
+        <label class="provider-card" data-provider="none">
+          <input type="radio" name="pacProviderRadio" class="provider-radio">
+          <div class="provider-info">
+            <div class="provider-header">
+              <span class="provider-name" style="color: var(--danger);"><span data-i18n="msg_disable_extension_732a2462">Отключить расширение</span></span>
+            </div>
+            <div class="provider-desc"><span data-i18n="msg_temporarily_release_browser_proxy_settings_85c90893">Временно освобождает настройки прокси в браузере.</span></div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Custom PAC URL Input Box (visible when customPacUrl is selected) -->
+      <div class="custom-pac-url-box" id="customPacUrlBox" style="display: none;">
+        <div class="custom-pac-url-title"><span data-i18n="msg_your_pac_script_url_9d761e35">Адрес вашего PAC-скрипта</span></div>
+        <div class="custom-pac-url-row">
+          <input type="url" class="text-input" id="customPacUrlInput" placeholder="https://example.com/proxy.pac" spellcheck="false" autocomplete="off">
+          <button class="btn btn-primary btn-sm" id="saveCustomPacUrlBtn">
+            <span><span data-i18n="msg_apply_e15f960d">Применить</span></span>
+          </button>
+        </div>
+        <div class="custom-pac-url-hint" id="customPacUrlHint"><span data-i18n="msg_direct_url_to_a_pac_file_https_or_http_only_o_079ad599">Прямая ссылка на готовый .pac файл (HTTPS или HTTP только на этом компьютере).</span></div>
+      </div>
+
+      <!-- Sync Bar -->
+      <div class="sync-bar">
+        <div class="sync-info">
+          <span class="sync-label"><span data-i18n="msg_last_update_c94eb824">Обновление</span></span>
+          <span class="sync-date" id="syncDate"><span data-i18n="msg_loading_4483b08e">Загрузка...</span></span>
+        </div>
+        <button class="btn btn-secondary" id="syncBtn">
+          <svg class="sync-icon" id="syncBtnIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M21 12a9 9 0 0 0-15.22-6.49L3 8"></path>
+            <path d="M3 3v5h5"></path>
+            <path d="M3 12a9 9 0 0 0 15.22 6.49L21 16"></path>
+            <path d="M16 16h5v5"></path>
+          </svg>
+          <span><span data-i18n="fidelity_update_pac">Обновить PAC</span></span>
+        </button>
+      </div>
+      <div class="explainer"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg><span data-i18n="fidelity_pac_explainer">PAC выбирает маршрут. Он не шифрует соединение и не заменяет VPN.</span></div>
+    </div>
+  </section>
+
+<section class="tab-content sites-editor" id="tab-exceptions">
+  <div class="sites-heading"><div><h1 data-i18n="fidelity_sites">Сайты</h1><p class="card-desc" data-i18n="msg_exceptions_allowlist_and_pac_routing_rules_f538afa0">Исключения, белый список и правила маршрутизации PAC</p></div></div>
+  <div class="domain-list-breadcrumb"><button id="domainListsBack" class="btn btn-secondary" hidden data-i18n="dlBack">← Сайты</button><strong id="domainListScopeTitle"></strong></div>
+  <div id="domainListsOverview">
+    <div class="domain-list-toolbar">
+    <button id="manualRulesLink" class="domain-list-manual" data-i18n="dlManual">Ручные правила</button>
+    <div class="domain-list-actions">
+      <button id="domainListAdd" class="btn btn-primary" data-i18n="dlAdd">Добавить лист</button>
+      <button id="domainListImport" class="btn btn-secondary" data-i18n="dlImport">Новый лист из .txt</button>
+      <button id="domainListsRetry" class="btn btn-secondary" data-i18n="sitesRetryLoad" hidden>Повторить загрузку</button>
+    </div>
+    </div>
+    <p id="domainListsStatus" class="card-desc" role="status" aria-live="polite"></p>
+    <form id="domainListForm" class="domain-list-form" hidden>
+      <label for="domainListName" data-i18n="dlName">Название листа</label><input id="domainListName" autocomplete="off" required>
+      <label><span data-i18n="dlProxy">Прокси для всего листа</span><select id="domainListProxy"></select></label>
+      <label for="domainListFile" hidden data-i18n="dlFile">Домены и wildcard, UTF-8 .txt</label><input id="domainListFile" type="file" accept=".txt,text/plain" hidden>
+      <p id="domainListPreview" role="status" aria-live="polite"></p>
+      <div class="domain-list-actions"><button id="domainListSave" class="btn btn-primary" type="submit" data-i18n="dlCreate">Создать лист</button><button id="domainListCancel" class="btn btn-secondary" type="button" data-i18n="dlCancel">Отмена</button></div>
+    </form>
+    <div id="domainListsRows"></div>
+    <p id="domainListsReorderHint" class="domain-list-hint" data-i18n="dlDragHint">Перетаскивайте за ручку слева · Alt + ↑/↓ для клавиатуры</p>
+    <p id="domainListsAnnouncement" class="domain-list-sr" role="status" aria-live="polite" aria-atomic="true"></p>
+  </div>
+  <div id="manualSitesEditor">
+      <div class="sites-actions">
+        <input type="file" id="fileImportInput" accept=".txt,text/plain" style="display: none;">
+        <button class="btn btn-secondary" id="importFileBtn" title="Загрузить домены из текстового файла (.txt, один домен на строку)" data-i18n-title="msg_import_domains_from_a_text_file_txt_one_domai_d845449c"><span data-i18n="fidelity_msg_import_txt_47bf575c">Загрузить .txt</span></button>
+        <button class="btn btn-secondary" id="exportFileBtn" title="Экспортировать текущий список сайтов в файл .txt" data-i18n-title="msg_export_the_current_site_list_to_a_txt_file_00f8aa40"><span data-i18n="fidelity_msg_export_txt_18f7f499">Экспорт .txt</span></button>
+        <button class="btn btn-secondary" id="modeToggleBtn"><span data-i18n="fidelity_msg_text_mode_e918f67f">Текстовый режим</span></button>
+        <button class="btn btn-secondary" id="retrySitesLoad" hidden data-i18n="sitesRetryLoad">Повторить загрузку</button>
+        <span class="autosave-status saved" id="saveStatusText" role="status" aria-live="polite"><span data-i18n="msg_autosave_c04c99b6">✓ Автосохранение</span></span>
+        <button class="btn btn-secondary" id="openHistoryBtn"><span data-i18n="msg_history_and_undo_881d5b0b">История и отмена</span></button>
+      </div>
+    <div class="proxy-target-row" id="newRuleProxyRow">
+      <label for="newRuleProxy" data-i18n="mpNewTarget">Прокси для новых сайтов и импорта</label>
+      <select id="newRuleProxy" class="input-field"></select>
+    </div>
+    <!-- Visual List View -->
+    <div id="listViewSection" class="content-section">
+      <!-- Tabs -->
+      <nav class="sub-nav-tabs">
+        <button class="tab-btn active" data-subtab="included">
+          <span data-i18n="fidelity_msg_via_proxy_aadb9e20">Через прокси (</span><span id="includedCount">0</span>)
+        </button>
+        <button class="tab-btn" data-subtab="excluded">
+          <span data-i18n="fidelity_msg_direct_1281e826">Напрямую (</span><span id="excludedCount">0</span>)
+        </button>
+        <button class="tab-btn" data-subtab="whitelist">
+          <span data-i18n="fidelity_msg_allowlist_9a20a69f">Белый список (</span><span id="whitelistCount">0</span>)
+        </button>
+        <button class="tab-btn" data-subtab="pac"><span data-i18n="dlPac">По PAC</span> (<span id="pacCount">0</span>)</button>
+      </nav>
+
+      <!-- Search & Add Bar -->
+      <div class="toolbar">
+        <div class="add-box">
+          <input type="text" class="input-field" id="newDomainInput" aria-label="Добавить домен" data-i18n-aria-label="sitesAddDomain" placeholder="Добавить домен (напр. rutracker.org или *.domain.com)" data-i18n-placeholder="msg_add_a_domain_e_g_rutracker_org_or_domain_com_760e587b">
+          <button class="btn btn-primary" id="addDomainBtn"><span data-i18n="msg_add_e188c252">+ Добавить</span></button>
+        </div>
+        <input type="text" class="search-field" id="searchDomainInput" aria-label="Поиск по списку" data-i18n-aria-label="sitesSearch" placeholder="Поиск по списку…" data-i18n-placeholder="fidelity_search_sites">
+        <select id="proxyFilter" class="input-field" aria-label="Фильтр по прокси" data-i18n-aria-label="mpProxyFilter"></select>
+        <select id="sourceFilter" class="input-field" aria-label="Источник правила" data-i18n-aria-label="msg_rule_source_a5e45b3c">
+          <option value="" data-i18n="msg_all_sources_71e214e1">Все источники</option><option value="manual" data-i18n="msg_manual_3e17d77f">Вручную</option><option value="site" data-i18n="msg_for_this_site_810aa684">Для сайта</option><option value="auto" data-i18n="msg_automatic_353cf589">Автоматически</option><option value="import" data-i18n="msg_from_a_file_4d212eef">Из файла</option>
+        </select>
+        <button class="btn btn-danger" id="clearListBtn" title="Очистить список доменов текущей вкладки" data-i18n-title="msg_clear_the_domain_list_in_the_current_tab_c93a495d"><span data-i18n="fidelity_msg_clear_list_a08cbf31">Очистить список</span></button>
+      </div>
+
+      <div class="selection-toolbar" id="selectionToolbar" hidden>
+        <label><input type="checkbox" id="selectAllFiltered"> <span data-i18n="mpSelectAll">Все найденные</span></label>
+        <span id="selectionCount" role="status" aria-live="polite"></span>
+        <select id="bulkProxy" aria-label="Перенести на прокси" data-i18n-aria-label="mpMoveTarget"></select>
+        <button id="bulkAssign" class="btn btn-secondary" data-i18n="mpMoveSelected">Перенести выбранные</button>
+        <button id="clearSelection" class="btn btn-secondary" data-i18n="mpClearSelection">Снять выбор</button>
+        <button id="bulkDelete" class="btn btn-danger" hidden data-i18n="dlDeleteSelected">Удалить выбранные</button>
+      </div>
+      <!-- Domain Items List -->
+      <div class="domain-list-container" id="domainListContainer">
+        <!-- Dynamically rendered -->
+      </div>
+    </div>
+
+    <!-- Raw Text Editor View -->
+    <div id="editorViewSection" class="content-section" style="display: none;">
+      <div class="editor-help-card">
+        <strong><span data-i18n="msg_text_editor_format_b2033128">Формат текстового редактора:</span></strong><br>
+        <span data-i18n="msg_proxy_site_list_e4ff0567">Список проксируемых сайтов</span> &rarr; <span data-i18n="msg_separator_5b64c280">разделитель</span> <code>===</code> &rarr; <span data-i18n="msg_exception_list_b338bd0b">список исключений</span> &rarr; <span data-i18n="msg_separator_5b64c280">разделитель</span> <code>===</code> &rarr; <span data-i18n="msg_allowlist_c4b551a6">белый список.</span>
+      </div>
+      <textarea class="raw-editor" id="rawTextEditor" aria-label="Списки сайтов в текстовом формате" data-i18n-aria-label="sitesRawEditor" spellcheck="false"></textarea>
+      <div class="editor-status-row">
+        <button id="rawRetrySave" class="btn btn-secondary" hidden data-i18n="mpReloadRetry">Обновить и повторить сохранение</button>
+        <span id="editorStatusText"><span data-i18n="msg_changes_are_saved_automatically_6ce33e8e">Изменения сохраняются автоматически</span></span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+  <!-- TAB 3: Own Proxies -->
+  <section class="tab-content" id="tab-proxies">
+    <div class="card">
+      <div class="card-title">
+        <span><span data-i18n="fidelity_proxies">Прокси</span></span>
+        <button class="btn btn-secondary btn-sm" id="proxyEditorModeToggle"><span data-i18n="msg_text_3091aca2">Текст</span></button>
+      </div>
+      <div class="card-desc"><span data-i18n="msg_the_proxy_is_checked_for_availability_before__c9f6c13f">Прокси автоматически проверяется на доступность перед добавлением.</span></div>
+
+      <!-- Inline Form Alert Banner -->
+      <div id="proxyFormAlert" class="alert-banner danger" style="display: none;">
+        <span></span>
+        <span id="proxyFormAlertText"></span>
+      </div>
+
+      <div class="proxy-target-row">
+        <label for="defaultProxySelect" data-i18n="mpDefaultTarget">По умолчанию для новых сайтов</label>
+        <select id="defaultProxySelect"></select>
+      </div>
+      <!-- Structured Form View -->
+      <div id="proxyFormView">
+        <label class="form-label" for="proxyName" data-i18n="mpOptionalName">Название (необязательно)</label>
+        <input class="text-input" id="proxyName" maxlength="64" autocomplete="off">
+        <div class="proxy-endpoint-fields">
+          <div class="form-group">
+            <label class="form-label" for="proxyProtocol"><span data-i18n="msg_protocol_b3680d4b">Протокол</span></label>
+            <select class="select-input" id="proxyProtocol">
+              <option value="HTTP" selected>HTTP</option>
+              <option value="HTTPS">HTTPS</option>
+              <option value="SOCKS5">SOCKS5</option>
+              <option value="SOCKS4">SOCKS4</option>
+            </select>
+          </div>
+          <div class="form-group proxy-host-field">
+            <label class="form-label" for="proxyHost"><span data-i18n="msg_server_address_4289b171">Адрес сервера</span></label>
+            <input type="text" class="text-input" id="proxyHost" placeholder="127.0.0.1 или proxy.example.com" data-i18n-placeholder="msg_127_0_0_1_or_proxy_example_com_dcd27499">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="proxyPort"><span data-i18n="msg_port_90947197">Порт</span></label>
+            <input type="number" class="number-input" id="proxyPort" placeholder="8080" min="1" max="65535">
+          </div>
+        </div>
+
+        <!-- Auth Section (Only visible for HTTP and HTTPS) -->
+        <div id="authSectionWrapper">
+          <label class="auth-checkbox-row" id="proxyAuthCheckRow">
+            <input type="checkbox" id="proxyAuthCheck">
+            <span><span data-i18n="msg_authentication_required_username_and_password_d712edbc">Требуется авторизация (логин и пароль)</span></span>
+          </label>
+
+          <!-- Auth Fields (Collapsible) -->
+          <div class="auth-fields-container" id="proxyAuthFields" style="display: none;">
+            <div class="form-group">
+              <label class="form-label" for="proxyUser"><span data-i18n="msg_username_5be12bfe">Логин</span></label>
+              <input type="text" class="text-input" id="proxyUser" placeholder="Username">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="proxyPass"><span data-i18n="msg_password_cb1a2074">Пароль</span></label>
+              <input type="password" class="text-input" id="proxyPass" placeholder="Password">
+            </div>
+          </div>
+        </div>
+
+        <!-- SOCKS Protocol Informative Notice (Hidden by default, shown for SOCKS) -->
+        <div id="socksNotice" class="alert-banner info" style="display: none; margin-top: 6px; font-size: 11px;">
+          <span></span>
+          <span><span data-i18n="msg_chromium_and_firefox_proxy_apis_do_not_suppor_b26b763a">Браузерные API Chromium и Firefox не поддерживают ввод логина и пароля для SOCKS4/SOCKS5. Используйте SOCKS без авторизации либо HTTP/HTTPS-прокси.</span></span>
+        </div>
+
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; margin-top: 8px;">
+          <span id="proxyCheckStatusText" style="font-size: 11px; color: var(--text-muted);"></span>
+          <button class="btn btn-primary btn-sm" id="addProxyBtn">
+            <span id="addProxyBtnIcon">+</span>
+            <span id="addProxyBtnText"><span data-i18n="msg_add_and_check_2392c0b8">Добавить и проверить</span></span>
+          </button>
+        </div>
+
+        <!-- List of Added Custom Proxies -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px;">
+          <span class="form-label"><span data-i18n="msg_configured_proxies_e037b435">Настроенные прокси:</span></span>
+          <button class="btn btn-secondary btn-sm" id="recheckAllProxiesBtn"
+            title="Проверить доступность всех прокси" data-i18n-title="msg_check_all_proxies_for_availability_f5570db5"><span data-i18n="msg_check_all_48f59aac">Проверить все</span></button>
+        </div>
+        <div class="proxy-list" id="proxyCardsList">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Raw Text Mode View -->
+      <div id="proxyRawView" style="display: none;">
+        <textarea class="code-area" id="customProxyText" aria-label="Список своих прокси"
+          placeholder="Примеры:&#10;HTTP 127.0.0.1:8080&#10;HTTPS user:pass@proxy.net:443&#10;SOCKS5 127.0.0.1:1080" data-i18n-aria-label="msg_your_proxy_list_97f390fb" data-i18n-placeholder="msg_examples_http_127_0_0_1_8080_https_user_pass__f4fabb50"></textarea>
+        <p class="card-desc" id="proxyDraftHint" aria-live="polite"><span data-i18n="msg_use_apply_to_save_changes_to_this_list_278f74a1">Изменения списка применяются кнопкой «Применить».</span></p>
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="btn btn-primary btn-sm" id="saveProxiesBtn"><span data-i18n="msg_apply_e15f960d">Применить</span></button>
+        </div>
+      </div>
+
+      <!-- Quick Toggles -->
+      <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 6px;">
+        <div class="switch-item">
+          <div class="switch-info">
+            <div class="switch-title"><span data-i18n="msg_local_tor_d95e42e8">Локальный Tor</span></div>
+            <div class="switch-desc">SOCKS5 127.0.0.1:9150 / 9050</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="torToggle" aria-label="Локальный Tor" data-i18n-aria-label="msg_local_tor_d95e42e8">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="switch-item">
+          <div class="switch-info">
+            <div class="switch-title"><span data-i18n="msg_local_cloudflare_warp_6d7e99e7">Локальный Cloudflare WARP</span></div>
+            <div class="switch-desc">SOCKS5 / HTTPS localhost:40000</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="warpToggle" aria-label="Локальный Cloudflare WARP" data-i18n-aria-label="msg_local_cloudflare_warp_6d7e99e7">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <details class="advanced-settings" id="proxyAdvanced">
+          <summary><span data-i18n="msg_advanced_settings_e0e021a0">Дополнительные параметры</span> <span class="advanced-state" id="proxyAdvancedState"></span></summary>
+        <div class="switch-item">
+          <div class="switch-info">
+            <div class="switch-title"><span data-i18n="msg_your_proxies_only_for_your_sites_b8d9f229">Свои прокси только для своих сайтов</span></div>
+            <div class="switch-desc"><span data-i18n="msg_use_your_proxies_only_for_exceptions_54d6cf55">Использовать свои прокси только для исключений</span></div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="ownOnlyToggle" aria-label="Свои прокси только для своих сайтов" data-i18n-aria-label="msg_your_proxies_only_for_your_sites_b8d9f229">
+            <span class="slider"></span>
+          </label>
+        </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 4: Modifiers & PAC Rules -->
+  <section class="tab-content" id="tab-mods">
+    <div class="card">
+      <div class="card-title"><span data-i18n="fidelity_options">Опции</span></div>
+      <div class="card-desc"><span data-i18n="msg_adjust_pac_script_rules_and_routing_modes_bb77b21c">Тонкая настройка правил и режимов работы PAC-скрипта.</span></div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_https_only_d783beb6">Только HTTPS</span></div>
+          <div class="switch-desc"><span data-i18n="msg_only_proxy_encrypted_sites_992e9e6a">Проксировать только зашифрованные сайты</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="httpsOnlyToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_encrypted_connection_to_proxy_4a5a4a3f">Шифрованная связь до прокси</span></div>
+          <div class="switch-desc"><span data-i18n="msg_only_use_https_tor_transport_0e5d2a76">Использовать только HTTPS/Tor транспорт</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="secureProxiesOnlyToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_disable_dns_in_pac_71cd069a">Запретить DNS в PAC</span></div>
+          <div class="switch-desc"><span data-i18n="msg_disable_dnsresolve_to_reduce_lookups_de340e19">Отключает dnsResolve() для ускорения</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="prohibitDnsToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_proxy_or_fail_07ac9e3a">Проксируй или умри!</span></div>
+          <div class="switch-desc"><span data-i18n="msg_prevent_direct_connections_when_the_proxy_fai_d6445a44">Запрещает прямое соединение при сбое прокси</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="proxyOrDieToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_onion_i2p_and_opennic_domains_87d2d453">Зоны .onion, .i2p, OpenNIC</span></div>
+          <div class="switch-desc"><span data-i18n="msg_proxy_special_domain_zones_c3a26b8f">Проксировать особые доменные зоны</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="moreDomainsToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 5: Notifications -->
+  <section class="tab-content" id="tab-notifications">
+    <div class="card">
+      <div class="card-title"><span data-i18n="fidelity_information">Информация</span></div>
+      <div class="card-desc"><span data-i18n="msg_choose_which_desktop_notifications_to_receive_0fe46371">Настройка оповещений на рабочем столе.</span></div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_pac_script_errors_fe7ef901">Ошибки PAC-скриптов</span></div>
+          <div class="switch-desc"><span data-i18n="msg_notify_about_proxy_server_failures_47a860dd">Оповещать при сбоях прокси-серверов</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="notifPacErrorToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_extension_errors_5c72f461">Ошибки расширения</span></div>
+          <div class="switch-desc"><span data-i18n="msg_notify_about_unexpected_errors_a055e504">Оповещать о непредвиденных ошибках</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="notifExtErrorToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="switch-item">
+        <div class="switch-info">
+          <div class="switch-title"><span data-i18n="msg_lost_proxy_control_e2f1e582">Утеря контроля прокси</span></div>
+          <div class="switch-desc"><span data-i18n="msg_notify_when_another_extension_changes_proxy_s_820ae2e1">Оповещать, если другое расширение сменило прокси</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="notifNoControlToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 5: Logs & Diagnostics -->
+  <section class="tab-content" id="tab-logs">
+    <div class="card">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <div>
+          <div class="card-title"><span data-i18n="fidelity_logs">Журнал</span></div>
+          <div class="card-desc"><span data-i18n="msg_network_pac_and_proxy_errors_2bba0d9a">Фиксация сетевых сбоев, ошибок PAC и прокси</span></div>
+        </div>
+        <div class="logs-stats-pill" id="logsTotalCountPill"><span data-i18n="msg_0_entries_166c5ae1">0 записей</span></div>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="logs-toolbar">
+        <div class="logs-filters" id="logsFilterGroup">
+          <button class="log-filter-btn active" data-category="all"><span data-i18n="msg_all_215816bf">Все</span></button>
+          <button class="log-filter-btn" data-category="network"><span data-i18n="msg_network_8006cb7a">Сеть</span> <span class="filter-count"
+              id="countNetwork"></span></button>
+          <button class="log-filter-btn" data-category="proxy"><span data-i18n="msg_proxies_a567776c">Прокси</span> <span class="filter-count"
+              id="countProxy"></span></button>
+          <button class="log-filter-btn" data-category="pac">PAC <span class="filter-count"
+              id="countPac"></span></button>
+          <button class="log-filter-btn" data-category="auth">Auth <span class="filter-count"
+              id="countAuth"></span></button>
+          <button class="log-filter-btn" data-category="system"><span data-i18n="msg_system_6da215b1">Система</span> <span class="filter-count"
+              id="countSystem"></span></button>
+        </div>
+
+        <div class="logs-search-row">
+          <div class="logs-search-wrapper">
+            <input type="text" id="logsSearchInput" class="form-input logs-search-input"
+              placeholder="Поиск по ошибкам, доменам, URL..." data-i18n-placeholder="msg_search_errors_domains_urls_f7d451a7">
+            <button id="clearLogsSearchBtn" class="logs-clear-search-btn" title="Очистить поиск"
+              style="display: none;" data-i18n-title="msg_clear_search_6e1f7baa">✕</button>
+          </div>
+        </div>
+
+        <div class="logs-action-buttons">
+          <button class="btn btn-secondary btn-sm" id="refreshLogsBtn" title="Обновить список логов" data-i18n-title="msg_refresh_the_log_b274f318"><span data-i18n="msg_update_603e460b">Обновить</span></button>
+          <button class="btn btn-secondary btn-sm" id="copyLogsBtn" title="Скопировать все логи в буфер обмена" data-i18n-title="msg_copy_all_log_entries_to_the_clipboard_aa89a048"><span data-i18n="msg_copy_1ecddf40">Копировать</span></button>
+          <button class="btn btn-secondary btn-sm" id="exportLogsBtn" title="Скачать логи в текстовый файл" data-i18n-title="msg_download_log_entries_as_a_text_file_5867f34f"><span data-i18n="msg_export_d2ab5a1b">Экспорт</span></button>
+          <button class="btn btn-danger btn-sm" id="clearLogsBtn" title="Очистить журнал логов" data-i18n-title="msg_clear_the_log_ee571f21"><span data-i18n="msg_clear_8965271d">Очистить</span></button>
+        </div>
+      </div>
+
+      <!-- Logs Container -->
+      <div id="logsContainer" class="logs-container">
+        <div class="empty-state">
+          <p style="font-size: 14.5px; font-weight: 600; margin-bottom: 4px;"><span data-i18n="msg_no_errors_recorded_8f9681c7">Ошибок не зафиксировано</span></p>
+          <p style="font-size: 11.5px; color: var(--text-muted);"><span data-i18n="msg_network_requests_proxies_and_pac_scripts_are__8ccd866d">Все сетевые запросы, прокси и PAC-скрипты работают в
+            штатном режиме</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 6: Diagnostics & Tools -->
+  <section class="tab-content" id="tab-tools">
+    <div class="card">
+      <div class="card-title"><span data-i18n="fidelity_check">Проверка</span></div>
+      <div class="card-desc"><span data-i18n="msg_check_your_connection_and_reset_settings_9d9c231f">Проверка состояния соединения и сброс настроек.</span></div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="settings-row">
+          <div>
+            <div class="switch-title"><span data-i18n="msg_connection_check_f00dcb8e">Проверка связи</span></div>
+            <div class="switch-desc" id="connResult"><span data-i18n="msg_check_the_connection_to_the_pac_server_c32752de">Проверяет связь с PAC-сервером</span></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="testConnBtn"><span data-i18n="msg_test_eae4c06a">Тест</span></button>
+        </div>
+
+
+
+
+        <div class="settings-row">
+          <div>
+            <div class="switch-title"><span data-i18n="msg_pac_script_source_eaf7c946">Код PAC-скрипта</span></div>
+            <div class="switch-desc"><span data-i18n="msg_inspect_the_active_pac_source_f25f4125">Инспектор активного кода PAC</span></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="viewPacScriptBtn"><span data-i18n="msg_source_1b3a63b2">Код</span></button>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <div class="switch-title" style="color: var(--danger);"><span data-i18n="msg_reset_everything_d449496d">Сбросить всё</span></div>
+            <div class="switch-desc"><span data-i18n="msg_restore_default_settings_bd1fb21c">Сброс к заводским настройкам</span></div>
+          </div>
+          <button class="btn btn-danger btn-sm" id="resetSettingsBtn"><span data-i18n="msg_reset_14b4afa6">Сброс</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="statusbar"><span id="extVersion"></span> <span data-i18n="fidelity_footer_hint">Изменения применяются автоматически</span></footer>
+
+  <!-- PAC Script Modal -->
+  <div id="pacScriptModal"
+    style="display: none; position: fixed; inset: 0; background: var(--modal-backdrop); z-index: 1000; align-items: center; justify-content: center; padding: 12px;">
+    <div
+      style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); width: 100%; max-width: 360px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: var(--shadow-lg);">
+      <div
+        style="padding: 10px 12px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-weight: 700; font-size: 12.5px;"><span data-i18n="msg_pac_script_source_eaf7c946">Код PAC-скрипта</span></span>
+        <button class="btn btn-secondary btn-sm" id="closePacModalBtn">✕</button>
+      </div>
+      <div style="padding: 10px; overflow-y: auto; flex: 1;">
+        <pre id="pacScriptContent"
+          style="font-family: monospace; font-size: 10.5px; white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Element -->
+  <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>
