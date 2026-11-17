@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
 // Deliberately open the browser action, not its HTML in a fixed-width tab.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const scratch = process.env.TMPDIR || 'C:/Users/User/AppData/Local/hermes/cache/scratch';
+const scratch = process.env.TMPDIR || os.tmpdir();
 const temp = await fs.mkdtemp(path.join(scratch, 'unroute-native-popup-'));
 let browser, timeout, finish;
 const result = new Promise(resolve => { finish = resolve; });
