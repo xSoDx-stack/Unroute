@@ -85,6 +85,8 @@ jobs:
       - name: Run Chrome Stable MV3 browser smoke
         env:
           CHROME_BIN: /usr/bin/google-chrome
+          # Linux Chrome uses the runner's English UI locale despite --lang=ru.
+          UNROUTE_TEST_LOCALE: en
         run: npm run test:browser:chrome
 
       - name: Install isolated Firefox Stable

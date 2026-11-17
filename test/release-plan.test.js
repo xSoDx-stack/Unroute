@@ -3,6 +3,14 @@ import { readFileSync } from 'node:fs';
 import { resolveReleasePlan } from '../.github/scripts/release-plan.mjs';
 
 describe('Release eligibility', () => {
+  it('matches the CI Chrome smoke locale to the Linux runner browser', () => {
+    const workflow = readFileSync(new URL('../.github/workflows/build-release.yml', import.meta.url), 'utf8');
+    const step = workflow.split('- name:').find(value =>
+      /^\s+run:\s+npm run test:browser:chrome\s*$/m.test(value));
+    expect(step, 'Chrome smoke step').to.be.a('string');
+    expect(step).to.match(/^\s+UNROUTE_TEST_LOCALE:\s+en\s*$/m);
+  });
+
   it('matches the CI Firefox smoke locale to the isolated en-US distribution', () => {
     const workflow = readFileSync(new URL('../.github/workflows/build-release.yml', import.meta.url), 'utf8');
     const step = workflow.split(/\r?\n\s+- name:/).find(value =>
