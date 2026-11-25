@@ -30,7 +30,7 @@ describe('Checked proxy addition', () => {
     settingsCoordinator.state = original.state;
     pacKitchen.invalidateCache();
   });
-  const add = proxy => new Promise(resolve => listener({ action: 'ADD_PROXY', proxy }, { id: 'test' }, resolve));
+  const add = proxy => new Promise(resolve => listener({ action: 'ADD_PROXY', proxy }, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
 
   it('merges a checked candidate into the latest list and persists its health', async () => {
     let release;
@@ -70,7 +70,7 @@ describe('Checked proxy addition', () => {
     setupMessageBus({ checkHealth: async () => ({ ok: true, latency: 8 }) });
     const saving = new Promise(resolve => listener({ action: 'SAVE_MODS', mods: {
       customProxyStringRaw: 'HTTP saved.example:8080',
-    } }, { id: 'test' }, resolve));
+    } }, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
     await ready;
     expect((await add('HTTP candidate.example:8080')).success).to.equal(true);
     release();

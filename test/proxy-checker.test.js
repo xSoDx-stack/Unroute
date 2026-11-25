@@ -3,6 +3,8 @@
 import { expect } from 'chai';
 import vm from 'vm';
 import { generateHealthCheckPac } from '../src/common/core/proxy-checker.js';
+import { getTemporaryCredentialsMap, setupAuthListener } from '../src/common/core/proxy-auth.js';
+import { logger } from '../src/common/core/logger.js';
 
 describe('Proxy Health Check PAC Wrapper (generateHealthCheckPac)', () => {
   const originalPacScript = `
@@ -121,6 +123,70 @@ describe('Proxy Health Check: Concurrency & State Race Protection (P1-1)', () =>
     appliedProxyConfigs = [];
   });
 
+  it('uses a single-hop probe and releases its response body', async () => {
+    const { checkProxyHealth } = await import('../src/common/core/proxy-checker.js');
+    let options;
+    let cancelled = false;
+    globalThis.fetch = async (_, requestOptions) => {
+      options = requestOptions;
+      return { status: 200, body: { async cancel() { cancelled = true; } } };
+    };
+    expect((await checkProxyHealth('HTTPS probe.example:443')).ok).to.equal(true);
+    expect(options.redirect).to.equal('manual');
+    expect(cancelled).to.equal(true);
+  });
+
+  for (const [label, overrides, expected407] of [
+    ['the active probe', {}, true],
+    ['another URL on the same proxy', { url: 'https://1.1.1.1/cdn-cgi/trace' }, false],
+    ['another port on the same host', { challenger: { host: 'probe.example', port: 8443 } }, false],
+    ['origin authentication', { isProxy: false }, false],
+    ['a probe with one challenge', { challenges: 1 }, false],
+  ]) {
+    it(`classifies an opaque fetch rejection for ${label}`, async () => {
+      const { checkProxyHealth } = await import('../src/common/core/proxy-checker.js');
+      const originalWebRequest = chrome.webRequest;
+      const originalWarn = logger.warn;
+      let authListener;
+      const replies = [];
+      const warnings = [];
+      logger.warn = (...args) => warnings.push(args);
+      chrome.webRequest = { onAuthRequired: { addListener(fn) { authListener = fn; } } };
+      try {
+        setupAuthListener(() => Promise.resolve());
+        globalThis.fetch = async url => {
+          const { challenges = 4, ...details } = overrides;
+          for (let i = 0; i < challenges; i++) {
+            replies.push(await new Promise(resolve => authListener({
+              url, isProxy: true, incognito: true, requestId: `health-check:${label}`,
+              challenger: { host: 'probe.example', port: 443 }, ...details,
+            }, resolve)));
+          }
+          throw new TypeError('Failed to fetch');
+        };
+        const result = await checkProxyHealth('HTTPS probe-user:mock-password@probe.example:443');
+        if (expected407) {
+          expect(replies.slice(0, 3)).to.deep.equal(Array(3).fill({
+            authCredentials: { username: 'probe-user', password: 'mock-password' },
+          }));
+          expect(replies[3]).to.deep.equal({ cancel: true });
+        }
+        expect(result.ok).to.equal(false);
+        expect(result.error.includes('407')).to.equal(expected407);
+        expect(result.error).not.to.match(/probe-user|mock-password/);
+        expect(JSON.stringify(warnings)).not.to.match(/probe-user|mock-password/);
+        expect(getTemporaryCredentialsMap()).to.deep.equal({});
+        expect(appliedProxyConfigs).to.have.length(2);
+
+        globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+        expect((await checkProxyHealth('HTTPS probe-user:mock-password@probe.example:443')).error).not.to.include('407');
+      } finally {
+        chrome.webRequest = originalWebRequest;
+        logger.warn = originalWarn;
+      }
+    });
+  }
+
   it('should not overwrite newer PAC configuration if provider changed during health check', async () => {
     const { pacSync } = await import('../src/common/core/pac-sync.js');
     const { checkProxyHealth } = await import('../src/common/core/proxy-checker.js');
@@ -154,6 +220,14 @@ describe('Proxy Health Check: Concurrency & State Race Protection (P1-1)', () =>
     expect(lastConfig.pacScript.data).to.include('anticensority:443');
     expect(lastConfig.pacScript.data).to.not.include('1.2.3.4:8080');
     expect(pacSync.currentPacProviderKey).to.equal('Антицензорити');
+  });
+
+  it('probes an explicitly selected SOCKS5 proxy without falling back to SOCKS4', async () => {
+    const { checkProxyHealth } = await import('../src/common/core/proxy-checker.js');
+    globalThis.fetch = async () => ({ status: 200 });
+    expect((await checkProxyHealth('SOCKS5 127.0.0.1:9050')).ok).to.equal(true);
+    const script = appliedProxyConfigs.find(config => config.pacScript?.data.includes('SOCKS5 127.0.0.1:9050')).pacScript.data;
+    expect(script).not.to.include('SOCKS 127.0.0.1:9050');
   });
 
   it('serializes concurrent health checks through the real probe queue', async () => {

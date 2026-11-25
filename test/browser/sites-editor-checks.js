@@ -46,7 +46,10 @@ export async function checkSitesEditor() {
     select('included');
     get('searchDomainInput').value = 'editor-proxy';
     get('searchDomainInput').dispatchEvent(new Event('input'));
-    assert(get('domainListContainer').querySelectorAll('.domain-card').length === 1, 'Search must filter cards');
+    await wait(() => {
+      const cards = get('domainListContainer').querySelectorAll('.domain-card');
+      return cards.length === 1 && cards[0].textContent.includes('editor-proxy.test');
+    });
     get('domainListContainer').querySelector('.delete-domain-btn').click();
     await wait(() => get('saveStatusText').classList.contains('saved'));
     assert((await send({ action: 'GET_EXCEPTIONS' })).data.exceptions['editor-proxy.test'] === undefined, 'Delete failed');

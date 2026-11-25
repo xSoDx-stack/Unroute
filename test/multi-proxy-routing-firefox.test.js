@@ -22,33 +22,44 @@ describe('Multi-proxy Firefox runtime', () => {
   });
   afterEach(() => { globalThis.chrome = saved.chrome; pacKitchen.getPacMods = saved.get; proxyBackend.getSettings = saved.settings; });
   it('inherits a single assigned tab target without requiring legacy pool', async () => {
-    expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([a]);
-    expect(await router.handle(req('cdn.test'))).to.deep.equal([a]);
+    expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([a, null]);
+    expect(await router.handle(req('cdn.test'))).to.deep.equal([a, null]);
+  });
+  it('appends a reserve only to proxied requests and never duplicates the primary endpoint', async () => {
+    mods.fallbackProxyChain = 'HTTPS b.test:443';
+    expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([a, b, null]);
+    expect(await router.handle(req('other.test'))).to.deep.equal([b, null]);
+    expect(await router.handle(req('direct.test'))).to.equal(null);
   });
   it('manual assigned and direct request rules beat the tab target', async () => {
     await router.handle(req('page.test', 'main_frame'));
-    expect(await router.handle(req('other.test'))).to.deep.equal([b]);
+    expect(await router.handle(req('other.test'))).to.deep.equal([b, null]);
     expect(await router.handle(req('direct.test'))).to.equal(null);
   });
   it('automatic CDN binding cannot hijack a different explicit tab target', async () => {
     mods.ruleMeta = { 'exception:other.test': { source: 'auto', site: 'elsewhere.test' } };
     await router.handle(req('page.test', 'main_frame'));
-    expect(await router.handle(req('other.test'))).to.deep.equal([a]);
+    expect(await router.handle(req('other.test'))).to.deep.equal([a, null]);
   });
   it('a separately manual proxy assignment wins even when its boolean rule originated automatically', async () => {
     mods.ruleMeta = { 'exception:other.test': { source: 'auto', site: 'elsewhere.test' },
       'proxy:other.test': { source: 'manual' } };
     await router.handle(req('page.test', 'main_frame'));
-    expect(await router.handle(req('other.test'))).to.deep.equal([b]);
+    expect(await router.handle(req('other.test'))).to.deep.equal([b, null]);
   });
   it('fails closed when an assigned target is missing, including with opt-in fallback', async () => {
     mods.ifProxyOrDie = false;
+    mods.ownProxyOrDie = false;
     delete mods.proxyRoutes['custom:a'];
     expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([dead]);
   });
-  it('allows DIRECT only for valid assigned targets with explicit opt-in', async () => {
+  it('allows DIRECT only for valid assigned targets with explicit ownProxyOrDie opt-in', async () => {
     mods.ifProxyOrDie = false;
+    mods.replaceDirectWith = 'HTTPS replacement.test:443';
     expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([a, null]);
+    mods.ifProxyOrDie = true;
+    mods.ownProxyOrDie = false;
+    expect(await router.handle(req('page.test', 'main_frame'))).to.deep.equal([a, { type: 'direct' }, null]);
   });
   it('fails closed on assigned resolver errors instead of using native PAC', async () => {
     mods.proxyRoutes = new Proxy({}, { get() { throw new Error('Broken route index'); } });

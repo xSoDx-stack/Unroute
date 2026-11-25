@@ -189,6 +189,29 @@ export const pacKitchen = {
     return parsedMods;
   },
 
+  /** Replace a fully validated portable snapshot without reconciling IDs against
+   * the destination catalog. Publish RAM only after the multi-key commit verifies.
+   * The caller owns the RPC/reset/coordinator barrier and revision allocation. */
+  async replacePortableSettings(candidate, persist) {
+    if (_mutationsPaused) throw new Error('Settings replacement is already in progress');
+    await this.beginReset();
+    try {
+      const raw = typeof candidate === 'function' ? await candidate() : candidate;
+      const [error, parsed] = createPacModifiers(raw);
+      if (error) throw error;
+      const stats = calculateExceptionStats(raw.exceptions, raw.whitelist);
+      const credentials = buildProxyCredentialsMap(raw.customProxyStringRaw || '');
+      await persist();
+      this.invalidateCache();
+      _cachedRawMods = raw;
+      _cachedParsedMods = parsed;
+      _cachedStats = stats;
+      snapshotStats.set(parsed, stats);
+      commitProxyCredentials(credentials);
+      return parsed;
+    } finally { this.endReset(); }
+  },
+
   updatePacMods,
 
   getCachedStats() {

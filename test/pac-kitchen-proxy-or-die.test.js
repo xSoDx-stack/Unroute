@@ -92,8 +92,8 @@ function FindProxyForURL(url, host) {
     expect(result).to.not.include('DIRECT');
   });
 
-  it('Manual Proxy rule + ProxyOrDie OFF should return CUSTOM_PROXY with DIRECT fallback', () => {
-    const mods = {
+  it('Manual Proxy rule ignores PAC ProxyOrDie OFF and only appends DIRECT when ownProxyOrDie is OFF', () => {
+    const pacRelaxedMods = {
       ifMindExceptions: true,
       exceptions: {
         'custom-proxy.example': true,
@@ -103,11 +103,23 @@ function FindProxyForURL(url, host) {
       ifUsePacScriptProxies: true,
     };
 
-    const cooked = cookPac(basePac, mods);
-    const findProxy = evaluateCookedPac(cooked);
+    const findProxyPacRelaxed = evaluateCookedPac(cookPac(basePac, pacRelaxedMods));
+    expect(findProxyPacRelaxed('https://custom-proxy.example/page', 'custom-proxy.example'))
+      .to.equal('HTTPS custom-node.example:443');
+    expect(findProxyPacRelaxed('https://blocked.example/page', 'blocked.example'))
+      .to.equal('HTTPS custom-node.example:443; HTTPS pac-proxy.example:8443; DIRECT');
 
-    const result = findProxy('https://custom-proxy.example/page', 'custom-proxy.example');
-    expect(result).to.equal('HTTPS custom-node.example:443; DIRECT');
+    const ownRelaxedMods = {
+      ...pacRelaxedMods,
+      ifProxyOrDie: true,
+      ownProxyOrDie: false,
+    };
+
+    const findProxyOwnRelaxed = evaluateCookedPac(cookPac(basePac, ownRelaxedMods));
+    expect(findProxyOwnRelaxed('https://custom-proxy.example/page', 'custom-proxy.example'))
+      .to.equal('HTTPS custom-node.example:443; DIRECT');
+    expect(findProxyOwnRelaxed('https://blocked.example/page', 'blocked.example'))
+      .to.equal('HTTPS custom-node.example:443; HTTPS pac-proxy.example:8443');
   });
 
   it('Manual Proxy rule without own or PAC proxies falls back to DIRECT instead of a dead proxy', () => {

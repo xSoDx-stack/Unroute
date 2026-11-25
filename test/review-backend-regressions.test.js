@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import vm from 'node:vm';
-import { proxyBackend as firefox } from '../src/firefox/core/proxy-backend.js';
+import { proxyBackend as firefox } from './firefox-proxy-backend-fixture.js';
 import { cookPac } from '../src/common/core/pac-script.js';
 import { pacSync } from '../src/common/core/pac-sync.js';
 import { setupMessageBus } from '../src/common/core/message-bus.js';
@@ -23,7 +23,7 @@ describe('Review backend regressions', () => {
     appState.ensureLocalStateInitialized = async () => {};
     try {
       setupMessageBus();
-      const result = await new Promise(resolve => listener({ action: 'IMPORT_EXCEPTIONS_BATCH', target: 'invalid' }, { id: 'review' }, resolve));
+      const result = await new Promise(resolve => listener({ action: 'IMPORT_EXCEPTIONS_BATCH', target: 'invalid' }, { id: 'review', url: 'moz-extension://review/pages/options/index.html' }, resolve));
       expect(result.error).to.equal('Translated import error');
     } finally { globalThis.chrome = original.chrome; appState.ensureLocalStateInitialized = original.init; }
   });
@@ -138,7 +138,7 @@ describe('Review backend regressions', () => {
     settingsCoordinator.finishReset = () => { finished++; };
     try {
       setupMessageBus();
-      const result = await new Promise(resolve => listener({ action: 'RESET_SETTINGS' }, { id: 'review' }, resolve));
+      const result = await new Promise(resolve => listener({ action: 'RESET_SETTINGS' }, { id: 'review', url: 'moz-extension://review/pages/options/index.html' }, resolve));
       expect(entered).to.equal(true);
       expect(result.error).to.equal('Barrier reached');
       expect(finished).to.equal(2);

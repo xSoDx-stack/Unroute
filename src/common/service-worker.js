@@ -6,7 +6,7 @@ import { setupAuthListener } from './core/proxy-auth.js';
 import { blockInformer } from './core/block-informer.js';
 import { errorHandlers } from './core/error-handlers.js';
 import { setupContextMenus, createContextMenuItems } from './core/context-menus.js';
-import { setupMessageBus } from './core/message-bus.js';
+import { setupMessageBus, captureSettingsGeneration } from './core/message-bus.js';
 import { proxyBackend } from './core/proxy-backend.js';
 import { siteResources } from './core/site-resources.js';
 import { tabProxyRouter } from './core/tab-proxy-router.js';
@@ -15,9 +15,12 @@ import { toolbarBadge } from './core/toolbar-badge.js';
 
 // 1. Setup messaging, auth listener, context menus, and event listeners synchronously at top level
 setupMessageBus();
-setupAuthListener(() => appState.ensureRequestStateInitialized());
+setupAuthListener(() => appState.ensureProxyAuthInitialized(), () => appState.ensureLoggerInitialized());
 setupContextMenus();
-errorHandlers.setupListeners();
+errorHandlers.setupListeners(async () => {
+  await appState.ensureStorageAccessRestricted();
+  await Promise.all([appState.ensureLoggerInitialized(), appState.ensureErrorHandlersInitialized()]);
+});
 blockInformer.init();
 siteResources.setup();
 tabProxyRouter.setup();
@@ -26,8 +29,11 @@ toolbarBadge.setup();
 // 2. Alarms listener for background periodic synchronization (ensuring state is initialized)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'periodic-pac-update') {
+    const isCurrent = captureSettingsGeneration();
+    if (!isCurrent()) return;
     try {
       await appState.ensureInitialized();
+      if (!isCurrent()) return;
       await pacSync.syncWithPacProvider({ ifUnattended: true });
     } catch (err) {
       console.warn('[Periodic PAC Update Warning]:', err);
@@ -37,14 +43,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Detect when a policy or another extension takes over the profile-wide
 // proxy setting after Unroute has already started.
-proxyBackend.addSettingsChangeListener(() => {
+proxyBackend.addSettingsChangeListener(async () => {
   // A health probe owns a temporary PAC until its queued restore completes.
   // Reconcile the final native state instead of recovering over that probe.
-  whenProxySettingsIdle()
-    .then(() => appState.ensureInitialized())
-    .then(() => pacSync.reconcileProxyState())
-    .then(() => toolbarBadge.schedule())
-    .catch((err) => console.warn('[Proxy Control State Warning]:', err));
+  const isCurrent = captureSettingsGeneration();
+  if (!isCurrent()) return;
+  try {
+    await whenProxySettingsIdle();
+    if (!isCurrent()) return;
+    await appState.ensureInitialized();
+    if (!isCurrent()) return;
+    await pacSync.reconcileProxyState();
+    if (isCurrent()) toolbarBadge.schedule();
+  } catch (err) { console.warn('[Proxy Control State Warning]:', err); }
 });
 
 // 4. Extension Installed / Updated
@@ -70,8 +81,7 @@ chrome.runtime.onStartup.addListener(async () => {
   }
 });
 
-// 6. Warm only request-critical state. Full PAC restoration remains lazy and is
-// performed by startup/install, proxy-control, alarm and message handlers.
-appState.ensureRequestStateInitialized().catch((err) => {
-  console.warn('[Service Worker] Background request state initialization warning:', err);
+// 6. Enforce the storage boundary on wake. Restore state at its consumers.
+appState.ensureStorageAccessRestricted().catch((err) => {
+  console.warn('[Service Worker] Storage access restriction warning:', err);
 });

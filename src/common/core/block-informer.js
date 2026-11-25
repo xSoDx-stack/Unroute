@@ -1,23 +1,27 @@
 'use strict';
 
-import { t } from './i18n.js';
-
 import { ipToHost } from './ip-to-host.js';
 import { pacKitchen } from './pac-kitchen.js';
-import { matchExceptionDomain } from './exception-rules.js';
+import { pacSync } from './pac-sync.js';
+import { matchConfiguredRule } from './domain-route-resolver.js';
+import { compilePolicy, routeConstraint } from './routing-policy.js';
 import { logger } from './logger.js';
 import { appState } from './app-state.js';
+import { webHost } from './web-host.js';
+import { diagnoseNavigationProxyFailure } from './proxy-diagnostics.js';
 
 const MAX_PROXIED_HOSTS_PER_TAB = 300;
 const MAX_PROXIES_PER_TAB = 50;
 const MAX_TRACKED_TABS = 150;
 const ANTIZAPRET_PROXY_HOST = 'proxy.antizapret.prostovpn.org';
 const TAB_ROUTE_STORAGE_PREFIX = 'block-informer-route:';
+const WEB_URLS = ['http://*/*', 'https://*/*'];
+const policies = new WeakMap();
 
 export function normalizeProxyEndpoint(proxyValue) {
   let value = String(proxyValue || '').trim().toLowerCase();
   if (!value) return '';
-  value = value.replace(/^(?:https?|proxy|socks5?|quic)\s+/i, '').trim();
+  value = value.replace(/^(?:https?|proxy|socks[45]?|quic)\s+/i, '').trim();
   if (value.includes('@')) value = value.slice(value.lastIndexOf('@') + 1);
   return value;
 }
@@ -77,6 +81,7 @@ function callSessionStorage(method, ...args) {
 class BlockInformer {
   constructor() {
     this.tabData = new Map();
+    this.pendingTabs = new Map();
     this.initialized = false;
     this.registeredCustomProxyString = '';
     this.routeStoragePromise = Promise.resolve();
@@ -113,31 +118,29 @@ class BlockInformer {
     // 2. Cleanup on tab close
     if (chrome.tabs && chrome.tabs.onRemoved) {
       chrome.tabs.onRemoved.addListener((tabId) => {
-        this.tabData.delete(tabId);
-        this._removePersistedRoute(tabId);
+        this.clearTab(tabId);
       });
     }
 
     // 3. Listen to webRequest events
     if (chrome.webRequest && chrome.webRequest.onResponseStarted) {
       chrome.webRequest.onResponseStarted.addListener(
-        (details) => this.handleRequest(details, true),
-        { urls: ['<all_urls>'] }
+        (details) => this.handleRequest(details, true).catch(error =>
+          console.warn('[Block Informer] Could not process response:', error)),
+        { urls: WEB_URLS }
       );
     }
 
     if (chrome.webRequest && chrome.webRequest.onErrorOccurred) {
       chrome.webRequest.onErrorOccurred.addListener(
-        (details) => {
-          this.handleRequest(details, false);
-          this.handleConnectionError(details);
-        },
-        { urls: ['<all_urls>'] }
+        (details) => Promise.all([this.handleRequest(details, false), this.handleConnectionError(details)])
+          .catch(error => console.warn('[Block Informer] Could not process proxy error:', error)),
+        { urls: WEB_URLS }
       );
     }
   }
 
-  handleConnectionError(details) {
+  async handleConnectionError(details) {
     // Private browsing activity must never enter the persistent journal.
     if (details?.incognito) return;
     const errStr = String(details?.error || '');
@@ -170,22 +173,33 @@ class BlockInformer {
       parsedDomain = '';
     }
 
+    await appState.ensureLoggerInitialized();
+    let mods = pacKitchen.getCachedMods();
+    if (!mods && appState.isRequestStateInitialized) {
+      try { mods = await pacKitchen.getPacMods(); } catch { mods = null; }
+    }
+    const diagnosed = diagnoseNavigationProxyFailure({
+      domain: parsedDomain,
+      error: errStr,
+      proxyInfo: details.proxyInfo || null,
+      ip: details.ip || '',
+      mods,
+      pacProviderKey: pacSync.isInitialized ? pacSync.currentPacProviderKey : '',
+      customPacUrl: pacSync.isInitialized ? pacSync.customPacUrl : '',
+    });
     logger.add({
       level: 'warn',
       category: 'proxy',
-      title: errStr,
-      message: t("msg_an_individual_proxy_request_failed_this_does__b7a768af", "Не удалось выполнить отдельный запрос через прокси. Это не означает, что прокси-сервер недоступен целиком."),
-      details: {
-        error: details.error,
-        domain: parsedDomain,
-        type: details.type,
-      },
-      // Do not merge failures for unrelated sites into one repeat counter.
-      groupKey: `${errStr}|${parsedDomain}|${details.type}`,
+      title: diagnosed.title,
+      message: diagnosed.message,
+      details: diagnosed.details,
+      // Do not merge failures for unrelated sites or different proxies into one repeat counter.
+      groupKey: diagnosed.groupKey,
     });
   }
 
   clearTab(tabId) {
+    this.pendingTabs.delete(tabId);
     this.tabData.delete(tabId);
     this._removePersistedRoute(tabId);
   }
@@ -198,18 +212,9 @@ class BlockInformer {
       return;
     }
 
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(details.url);
-    } catch {
-      return;
-    }
-
     // Only real web requests belong in diagnostics, regardless of browser.
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) return;
-
-    const hostname = parsedUrl.hostname.toLowerCase();
-    if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    const hostname = webHost(details.url).replace(/\.+$/, '');
+    if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1') {
       return;
     }
 
@@ -227,26 +232,39 @@ class BlockInformer {
     // statistics. Main-frame requests still take the complete route-classification
     // path so the persisted current-site route remains accurate.
     const existingData = this.tabData.get(details.tabId);
+    let proxyHost = proxyEndpointFromInfo(proxyInfo);
     if (!isMainFrame && existingData?.proxiedHosts.has(hostname)) {
-      let observedProxy = proxyEndpointFromInfo(proxyInfo);
+      let observedProxy = proxyHost;
       if (!observedProxy && details.ip) {
         const hostFromIp = ipToHost.get(details.ip);
         if (hostFromIp && hostname !== details.ip && hostname !== hostFromIp.replace(/:\d+$/, '')) {
           observedProxy = hostFromIp;
         }
       }
-      if (observedProxy && !existingData.proxies.has(observedProxy)) {
+      if (observedProxy && !existingData.proxies.has(normalizeProxyEndpoint(observedProxy))) {
         this.recordProxiedHost(details.tabId, hostname, observedProxy, false);
       }
       return;
     }
 
+    // A browser-reported endpoint is enough for resource statistics. Only
+    // main-frame route classification and IP/PAC inference need restored state.
+    if (!isMainFrame && proxyHost) {
+      this.recordProxiedHost(details.tabId, hostname, proxyHost, false);
+      return;
+    }
+
     if (!appState.isRequestStateInitialized) {
+      const tab = this.pendingTabs.get(details.tabId) || { readers: 0 };
+      tab.readers++;
+      this.pendingTabs.set(details.tabId, tab);
       try {
-        await appState.ensureRequestStateInitialized();
+        await appState.ensureRoutingStateInitialized();
       } catch {
         // Non-critical: continue with available state
       }
+      if (this.pendingTabs.get(details.tabId) !== tab) return;
+      if (--tab.readers === 0) this.pendingTabs.delete(details.tabId);
     }
 
     let mods = null;
@@ -261,7 +279,6 @@ class BlockInformer {
       // Non-critical: route detection can continue with browser event data.
     }
 
-    let proxyHost = proxyEndpointFromInfo(proxyInfo);
     let confidence = proxyHost && requestSucceeded ? 'observed' : 'configured';
 
     // A. Check remote IP against known proxy IPs
@@ -283,13 +300,19 @@ class BlockInformer {
       return;
     }
 
-    // B. Check domain matching against PAC Kitchen user exceptions
+    // B. Infer configured routes only when no observed endpoint is available.
     if (!proxyHost) {
       try {
-        if (mods && mods.exceptions) {
-          const match = matchExceptionDomain(hostname, mods.exceptions);
-          if (match && match.matched && match.isProxied) {
-            proxyHost = (mods.filteredCustomsString || '').split(';')[0].trim();
+        if (mods) {
+          const match = matchConfiguredRule(hostname, mods);
+          if (match.isProxied) {
+            if (mods.ifMindWhitelist || mods.ifProxyHttpsUrlsOnly) {
+              let compiled = policies.get(mods);
+              if (!compiled) { compiled = compilePolicy(mods); policies.set(mods, compiled); }
+              if (routeConstraint(details.url, hostname, compiled.policy, compiled.whitelist)) return;
+            }
+            const chain = match.proxyId ? mods.proxyRoutes?.[match.proxyId] : mods.filteredCustomsString;
+            proxyHost = (chain || '').split(';', 1)[0].trim();
             confidence = 'configured';
           }
         }
@@ -354,6 +377,7 @@ class BlockInformer {
   }
 
   clearRoutes() {
+    this.pendingTabs.clear();
     this.tabData.clear();
     return this._queueRouteStorage(async () => {
       const stored = await callSessionStorage('get', null);
@@ -421,14 +445,14 @@ class BlockInformer {
     }
     data.proxiedHosts.add(hostname);
 
-    if (proxyHost && data.proxies.size >= MAX_PROXIES_PER_TAB && !data.proxies.has(proxyHost)) {
+    if (normalizedProxyHost && data.proxies.size >= MAX_PROXIES_PER_TAB && !data.proxies.has(normalizedProxyHost)) {
       const oldestProxy = data.proxies.values().next().value;
       if (oldestProxy !== undefined) {
         data.proxies.delete(oldestProxy);
       }
     }
-    if (proxyHost) {
-      data.proxies.add(proxyHost);
+    if (normalizedProxyHost) {
+      data.proxies.add(normalizedProxyHost);
     }
 
   }

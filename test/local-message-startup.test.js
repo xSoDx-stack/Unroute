@@ -7,6 +7,7 @@ import { applicationState } from '../src/common/core/application-state.js';
 import { pacKitchen } from '../src/common/core/pac-kitchen.js';
 import { logger } from '../src/common/core/logger.js';
 import { storage } from '../src/common/core/storage.js';
+import { siteResources } from '../src/common/core/site-resources.js';
 
 describe('Local commands during network startup', () => {
   it('omits large rule collections only when the editor has the current revision', async () => {
@@ -24,7 +25,7 @@ describe('Local commands during network startup', () => {
     settingsCoordinator.state = async () => ({ pending: false });
     try {
       setupMessageBus();
-      const send = knownRevision => new Promise(resolve => listener({ action: 'GET_EXCEPTIONS', knownRevision }, { id: 'test' }, resolve));
+      const send = knownRevision => new Promise(resolve => listener({ action: 'GET_EXCEPTIONS', knownRevision }, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
       const unchanged = (await send(12)).data;
       expect(unchanged).to.include({ unchanged: true, revision: 12, defaultProxyId: null, catalogRevision: 0 });
       expect(unchanged.proxyCatalog).to.be.an('array');
@@ -72,7 +73,7 @@ describe('Local commands during network startup', () => {
       setupMessageBus({ checkHealth: () => new Promise(resolve => {
         releaseHealth = () => resolve({ ok: true, latency: 1 }); healthStarted();
       }) });
-      const send = message => new Promise(resolve => listener(message, { id: 'test' }, resolve));
+      const send = message => new Promise(resolve => listener(message, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
       const health = send({ action: 'CHECK_PROXY_HEALTH', proxy: 'HTTPS user:secret@proxy.test:443' });
       await checking;
       const resetting = send({ action: 'RESET_SETTINGS' });
@@ -99,6 +100,50 @@ describe('Local commands during network startup', () => {
       storage.set = original.set;
     }
   });
+  it('drains a pending PAC freshness write before reset clears storage', async () => {
+    const original = { chrome: globalThis.chrome, settle: appState.settlePendingInitialization,
+      resources: siteResources.clear, reset: applicationState.reset, clear: storage.clear,
+      freshness: pacSync.persistFreshness, download: pacSync.downloadPacFromProvider,
+      snapshot: pacSync._createStateSnapshot(), expected: pacSync.isExpectedPacApplied };
+    const events = [];
+    let listener, entered, release;
+    const started = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    globalThis.chrome = { runtime: { id: 'test', getURL: value => `chrome-extension://test/${value}`,
+      onMessage: { addListener: fn => { listener = fn; } } },
+      action: { setTitle() {} } };
+    appState.settlePendingInitialization = async () => {};
+    siteResources.clear = async () => {};
+    applicationState.reset = async () => {};
+    storage.clear = async () => { events.push('storage cleared'); throw new Error('Stop after storage clear'); };
+    pacSync.rawPacData = 'function FindProxyForURL(){return "DIRECT";}';
+    pacSync.currentPacProviderKey = 'onlyOwnSites';
+    pacSync.isExpectedPacApplied = true;
+    pacSync.downloadPacFromProvider = async () => pacSync.rawPacData;
+    pacSync.persistFreshness = async () => { entered(); await gate; events.push('freshness written'); };
+    try {
+      setupMessageBus();
+      const syncing = pacSync.syncWithPacProvider().catch(error => error);
+      await started;
+      const resetting = new Promise(resolve => listener({ action: 'RESET_SETTINGS' }, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      release();
+      await syncing;
+      expect((await resetting).error).to.equal('Stop after storage clear');
+      expect(events).to.deep.equal(['freshness written', 'storage cleared']);
+    } finally {
+      release();
+      globalThis.chrome = original.chrome;
+      appState.settlePendingInitialization = original.settle;
+      siteResources.clear = original.resources;
+      applicationState.reset = original.reset;
+      storage.clear = original.clear;
+      pacSync.persistFreshness = original.freshness;
+      pacSync.downloadPacFromProvider = original.download;
+      pacSync._restoreStateSnapshot(original.snapshot);
+      pacSync.isExpectedPacApplied = original.expected;
+    }
+  });
   it('returns logs and clears PAC without awaiting the full initialization', async () => {
     const original = { chrome: globalThis.chrome, full: appState.ensureInitialized, local: appState.ensureLocalStateInitialized,
       clear: pacSync.clearPac, state: settingsCoordinator.state, applied: applicationState.applied,
@@ -119,7 +164,7 @@ describe('Local commands during network startup', () => {
     logger.getStats = () => ({ total: 1 });
     try {
       setupMessageBus();
-      const send = action => new Promise(resolve => listener({ action }, { id: 'test' }, resolve));
+      const send = action => new Promise(resolve => listener({ action }, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
       expect((await send('GET_LOGS')).data.logs[0].title).to.equal('Available locally');
       expect((await send('CLEAR_PAC')).success).to.equal(true);
       expect(cleared).to.equal(true);

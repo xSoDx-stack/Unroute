@@ -7,8 +7,10 @@ import { domainMutationError, requireRuleRevision } from './domain-rule-mutation
 export const MAX_DOMAIN_LISTS = 100;
 export const MAX_LIST_DOMAINS = 100000;
 export const MAX_DOMAIN_LIST_NAME_LENGTH = 64;
-const normalizedLists = new WeakMap();
-const normalizedDomains = new WeakMap();
+// Only snapshots owned by this module may bypass validation by identity.
+const normalizedLists = new WeakSet();
+const normalizedDomains = new WeakSet();
+const normalizedRows = new WeakSet();
 
 function invalid(message = 'Invalid domain list.') {
   return domainMutationError('INVALID_DOMAIN_LIST', message);
@@ -21,41 +23,59 @@ export function normalizeDomainListName(value) {
   return name;
 }
 
+export function suggestDomainListName(value, existingNames = []) {
+  // Names use NFKC + lowercase, not transliteration or full Unicode case folding.
+  const base = normalizeDomainListName([...value.normalize('NFKC').trim()].slice(0, MAX_DOMAIN_LIST_NAME_LENGTH).join(''));
+  const used = new Set([...existingNames].map(name => name.normalize('NFKC').trim().toLowerCase()));
+  let candidate = base;
+  for (let index = 2; used.has(candidate.toLowerCase()); index++) {
+    const suffix = ` (${index})`;
+    candidate = [...base].slice(0, MAX_DOMAIN_LIST_NAME_LENGTH - suffix.length).join('') + suffix;
+  }
+  return candidate;
+}
+
 export function normalizeListDomains(values) {
   if (!Array.isArray(values) || values.length > MAX_LIST_DOMAINS) throw invalid('Invalid list domains.');
-  if (normalizedDomains.has(values)) return normalizedDomains.get(values);
-  const normalized = [...new Set(values.map(value => {
+  if (normalizedDomains.has(values)) return values;
+  const domains = new Set();
+  for (const value of values) {
     const result = normalizeDomainRule(value);
     if (!result.valid) throw invalid(result.error);
-    return result.domain;
-  }))];
-  const result = normalized.length === values.length && normalized.every((value, i) => value === values[i]) ? values : normalized;
-  normalizedDomains.set(values, result);
-  normalizedDomains.set(result, result);
-  return result;
+    domains.add(result.domain);
+  }
+  const normalized = Object.freeze([...domains]);
+  normalizedDomains.add(normalized);
+  return normalized;
 }
 
 /** Validate atomically; never drop invalid rows or collapse different owners. */
 export function normalizeDomainLists(values) {
   if (!Array.isArray(values) || values.length > MAX_DOMAIN_LISTS) throw invalid('Invalid domain lists.');
-  if (normalizedLists.has(values)) return normalizedLists.get(values);
-  const ids = new Set();
+  if (normalizedLists.has(values)) return values;
+  const ids = new Set(), names = new Set();
+  // Reserve unique existing names before suffixing older duplicates.
+  const reservedNames = new Set(Array.from(values, list => normalizeDomainListName(list?.name).toLowerCase()));
   let total = 0;
   const normalized = values.map(list => {
     if (!list || typeof list !== 'object' || typeof list.id !== 'string' || !list.id || list.id.length > 128 ||
         ids.has(list.id) || typeof list.proxyId !== 'string' || !list.proxyId || list.proxyId.length > 128 ||
         typeof list.enabled !== 'boolean') throw invalid();
     ids.add(list.id);
-    const name = normalizeDomainListName(list.name);
+    let name = normalizeDomainListName(list.name);
+    if (names.has(name.toLowerCase())) name = suggestDomainListName(name, reservedNames);
+    names.add(name.toLowerCase()); reservedNames.add(name.toLowerCase());
     const domains = normalizeListDomains(list.domains);
     total += domains.length;
     if (total > MAX_LIST_DOMAINS) throw invalid('Domain list limit exceeded.');
-    return name === list.name && domains === list.domains ? list : { ...list, name, domains };
+    if (normalizedRows.has(list) && name === list.name) return list;
+    const row = Object.freeze({ ...list, name, domains });
+    normalizedRows.add(row);
+    return row;
   });
-  const result = normalized.every((list, i) => list === values[i]) ? values : normalized;
-  normalizedLists.set(values, result);
-  normalizedLists.set(result, result);
-  return result;
+  Object.freeze(normalized);
+  normalizedLists.add(normalized);
+  return normalized;
 }
 
 function findList(raw, id) {
@@ -69,6 +89,9 @@ export function saveDomainList(raw, message, { catalog = [] } = {}) {
   const creating = message.listId === undefined;
   const current = creating ? null : findList(raw, message.listId);
   const name = message.name === undefined && current ? current.name : normalizeDomainListName(message.name);
+  if ((raw.domainLists || []).some(list => list.id !== current?.id && normalizeDomainListName(list.name).toLowerCase() === name.toLowerCase())) {
+    throw domainMutationError('DOMAIN_LIST_NAME_EXISTS', 'A domain list with this name already exists.');
+  }
   const enabled = message.enabled === undefined && current ? current.enabled : message.enabled;
   if (typeof enabled !== 'boolean') throw invalid('List enabled must be boolean.');
   const proxyId = message.proxyId === undefined && current ? current.proxyId : message.proxyId;
@@ -114,7 +137,7 @@ export function matchDomainLists(host, lists = EMPTY_LISTS) {
   if (!compiled) {
     compiled = lists.filter(list => list.enabled).map(list => ({ list,
       rules: Object.fromEntries(list.domains.map(domain => [domain, true])) }));
-    compiledSnapshots.set(lists, compiled);
+    if (normalizedLists.has(lists) || lists === EMPTY_LISTS) compiledSnapshots.set(lists, compiled);
   }
   for (const { list, rules } of compiled) {
     const match = matchExceptionDomain(host, rules);

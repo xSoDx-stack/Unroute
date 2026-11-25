@@ -7,6 +7,10 @@ import { clarify, Warning } from './errors-lib.js';
 const checkCon = t("msg_there_is_a_network_problem_check_your_connect_855d914d", "Что-то не так с сетью, проверьте соединение.");
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 
+function cancelBody(stream) {
+  try { stream?.cancel?.()?.catch(() => {}); } catch { /* already closed */ }
+}
+
 function decodeUtf8(decoder, value, options) {
   try {
     return decoder.decode(value, options);
@@ -91,13 +95,15 @@ export const httpLib = {
     signal = null,
   } = {}) {
     const controller = new AbortController();
-    const abort = () => controller.abort();
+    const abort = () => controller.abort(signal.reason);
     if (signal?.aborted) abort();
     signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+    let res;
+    let reader;
     try {
-      const res = await fetch(url, {
+      res = await fetch(url, {
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -136,7 +142,7 @@ export const httpLib = {
       }
 
       if (res.body && typeof res.body.getReader === 'function') {
-        const reader = res.body.getReader();
+        reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8', { fatal: true });
         let receivedBytes = 0;
         const textChunks = [];
@@ -150,9 +156,6 @@ export const httpLib = {
           }
           receivedBytes += value.length;
           if (receivedBytes > maxBytes) {
-            try {
-              await reader.cancel();
-            } catch { }
             throw clarify(
               new Error('Response body too large'),
               t("msg_the_response_exceeds_the_size_limit_sub_77874048", "Размер ответа превышает допустимый лимит ($1).", [formatLimit(maxBytes)])
@@ -187,6 +190,8 @@ export const httpLib = {
       }
       return text;
     } catch (err) {
+      cancelBody(reader || res?.body);
+      if (signal?.aborted && controller.signal.reason === signal.reason) throw signal.reason;
       if (err instanceof Warning) {
         throw err;
       }
@@ -195,6 +200,7 @@ export const httpLib = {
       }
       throw clarify(err, checkCon);
     } finally {
+      reader?.releaseLock?.();
       // Keep the timeout active until the complete response body has been read.
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);

@@ -2,12 +2,37 @@
 
 import { expect } from 'chai';
 import {
+  parseCustomProxies,
   parseProxyHostInput,
   parseProxyScheme,
+  proxyEndpointKey,
   getRootDomain,
 } from '../src/common/core/utils.js';
+import { webHost } from '../src/common/core/web-host.js';
 
 describe('Utils: parseProxyScheme & getRootDomain (Tasks 6 & 7.1)', () => {
+  it('keeps URL host extraction separate from proxy endpoint normalization', () => {
+    expect(webHost('HTTPS://Bücher.example.:8443/path')).to.equal('xn--bcher-kva.example.');
+    expect(webHost('http://[2001:0db8::1]:8080/')).to.equal('[2001:db8::1]');
+    expect(webHost('wss://socket.example/')).to.equal('');
+    expect(webHost('wss://socket.example/', true)).to.equal('socket.example');
+    expect(webHost('ws://socket.example/', true)).to.equal('socket.example');
+    expect(webHost('ftp://example.test/', true)).to.equal('');
+    expect(webHost('/relative')).to.equal('');
+
+    expect(parseProxyScheme('HTTPS Bücher.example.:08443').hostPort).to.equal('xn--bcher-kva.example:8443');
+    expect(parseProxyHostInput('http://Bücher.example.:08443/path')).to.deep.equal({
+      host: 'Bücher.example.', port: '08443',
+    });
+  });
+
+  it('uses legacy PROXY aliases for list parsing and identity but not for single endpoint parsing', () => {
+    const raw = 'pRoXy user:pass@[::1]:0080';
+    expect(parseProxyScheme(raw)).to.equal(null);
+    expect(parseCustomProxies(raw)[0]).to.include({ type: 'HTTP', hostPort: '[::1]:80' });
+    expect(proxyEndpointKey(raw)).to.equal('PROXY 127.0.0.1:80');
+  });
+
   describe('Canonical Proxy Parser', () => {
     it('should correctly parse standard HTTP IPv4:port without auth', () => {
       const res = parseProxyScheme('HTTP 127.0.0.1:8080');
@@ -65,6 +90,9 @@ describe('Utils: parseProxyScheme & getRootDomain (Tasks 6 & 7.1)', () => {
       expect(parseProxyScheme('HTTP proxy.example.com:-80')).to.be.null;
       expect(parseProxyScheme('HTTP proxy.example.com:abc')).to.be.null;
       expect(parseProxyScheme('HTTP proxy.example.com:80.5')).to.be.null;
+      for (const port of ['0x50', '8e2', '+8080', '8080.']) {
+        expect(parseProxyScheme(`HTTP proxy.example.com:${port}`)).to.be.null;
+      }
     });
 
     it('should reject unknown protocols and invalid prefixes', () => {
@@ -111,8 +139,7 @@ describe('Utils: parseProxyScheme & getRootDomain (Tasks 6 & 7.1)', () => {
       expect(parseProxyHostInput('[::1]:bad')).to.equal(null);
     });
 
-    it('should parse multi-line custom proxy string using canonical parseCustomProxies', async () => {
-      const { parseCustomProxies } = await import('../src/common/core/utils.js');
+    it('should parse multi-line custom proxy string using canonical parseCustomProxies', () => {
       const raw = `
         # Comment line
         HTTPS user:pass@proxy1.com:443;
@@ -149,6 +176,8 @@ describe('Utils: parseProxyScheme & getRootDomain (Tasks 6 & 7.1)', () => {
     it('should safely fall back to full host for IP addresses, localhost, and internal hosts', () => {
       expect(getRootDomain('192.168.1.1')).to.equal('192.168.1.1');
       expect(getRootDomain('127.0.0.1')).to.equal('127.0.0.1');
+      expect(getRootDomain('2001:db8::1')).to.equal('2001:db8::1');
+      expect(getRootDomain('https://[2001:db8::1]:8443/')).to.equal('[2001:db8::1]');
       expect(getRootDomain('localhost')).to.equal('localhost');
       expect(getRootDomain('internal-host')).to.equal('internal-host');
     });

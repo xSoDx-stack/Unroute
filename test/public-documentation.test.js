@@ -16,7 +16,12 @@ describe('Public documentation policy', () => {
     const inputs = sourceLoop.right.elements.map(value => value.value);
     expect(inputs).not.to.include('docs');
     expect(inputs.filter(value => value.startsWith('docs/')).map(value => value.slice(5)).sort()).to.deep.equal(publicDocs);
-    expect(readdirSync(new URL('../docs/', import.meta.url)).sort()).to.deep.equal(publicDocs);
+    // Local store copy is ignored by Git and excluded by the packaging allowlist.
+    const shippedDocs = readdirSync(new URL('../docs/', import.meta.url))
+      .filter(name => name !== 'chrome-store-description.md');
+    expect(shippedDocs.sort()).to.deep.equal(publicDocs);
+    const ignored = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+    expect(ignored).to.include('/docs/chrome-store-description.md');
     for (const name of publicDocs) {
       const url = new URL(`../docs/${name}`, import.meta.url);
       const text = readFileSync(url, 'utf8');

@@ -60,7 +60,7 @@ describe('Current-site selection RPC and real settings queue', () => {
     proxyBackend.getSettings = original.settings;
     pacKitchen.invalidateCache();
   });
-  const send = message => new Promise(resolve => listener(message, { id: 'test' }, resolve));
+  const send = message => new Promise(resolve => listener(message, { id: 'test', url: 'chrome-extension://test/pages/popup/index.html' }, resolve));
   const choose = (proxyId, expectedRevision, expectedHost) => send({ action: 'SET_SITE_ROUTE', currentTabId: 7,
     domain: 'site.test', isProxy: true, proxyId, expectedRevision, expectedHost });
   async function seed() {

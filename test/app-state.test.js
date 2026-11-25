@@ -37,6 +37,8 @@ describe('AppState initialization', () => {
     storage.restrictLocalAccess = async () => { calls.restrict++; };
 
     try {
+      await Promise.all([appState.ensureRoutingStateInitialized(), appState.ensureRoutingStateInitialized()]);
+      expect(calls).to.deep.equal({ logger: 0, ipToHost: 1, errorHandlers: 0, pacMods: 1, pacSync: 0, restrict: 1 });
       await Promise.all([
         appState.ensureRequestStateInitialized(),
         appState.ensureRequestStateInitialized(),

@@ -13,28 +13,24 @@ import { utils } from './utils.js';
 import { appState } from './app-state.js';
 import { proxyBackend } from './proxy-backend.js';
 import { settingsCoordinator } from './settings-coordinator.js';
+import { webHost } from './web-host.js';
 
 const SESSION_KEY = 'site-resource-tabs';
 const MAX_TABS = 100;
 const MAX_HOSTS = 300;
 const BATCH_MS = 1500;
+const ROUTING_FIELDS = ['_schemaVersion', '_revision', '_rulesRevision', 'ifNoMods', 'ifMindExceptions', 'customProxyStringRaw'];
 
 const hasOwnRoutes = mods => Boolean(mods.filteredCustomsString || Object.keys(mods.domainProxyIds || {}).length ||
   mods.domainLists?.some(list => list.enabled));
 
 export function resourceHost(url) {
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol)) return '';
-    const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
-    // Never silently turn local services into public proxy destinations.
-    if (host === 'localhost' || /\.(?:localhost|local|internal)$/.test(host) ||
-        /^[\d.]+$/.test(host) || host.includes(':')) return '';
-    const normalized = normalizeDomainRule(host, { allowWildcard: false });
-    return normalized.valid ? normalized.domain : '';
-  } catch {
-    return '';
-  }
+  const host = webHost(url, true).replace(/\.$/, '');
+  // Never silently turn local services into public proxy destinations.
+  if (!host || host === 'localhost' || /\.(?:localhost|local|internal)$/.test(host) ||
+      /^[\d.]+$/.test(host) || host.includes(':')) return '';
+  const normalized = normalizeDomainRule(host, { allowWildcard: false });
+  return normalized.valid ? normalized.domain : '';
 }
 
 function callApi(owner, method, ...args) {
@@ -54,19 +50,24 @@ export class SiteResources {
     this.ready = null;
     this.timer = null;
     this.queue = Promise.resolve();
+    this.persistenceQueue = Promise.resolve();
+    this.persistedSnapshot = null;
     this.lastError = '';
     this.needsApply = false;
     this.registered = false;
     this.rulesRevision = 0;
+    this.generation = 0;
   }
 
   init() {
     if (this.ready) return this.ready;
+    const generation = this.generation;
     this.ready = (async () => {
       const saved = await callApi(chrome.storage?.session, 'get', SESSION_KEY);
+      const tabs = await callApi(chrome.tabs, 'query', {});
+      if (generation !== this.generation) return;
       this.needsApply = Boolean(saved?.[SESSION_KEY]?.needsApply);
       if (this.needsApply) this.schedule();
-      const tabs = await callApi(chrome.tabs, 'query', {});
       for (const tab of tabs || []) {
         if (tab.incognito) continue;
         const record = this.observeTab(tab.id, tab.url);
@@ -83,14 +84,17 @@ export class SiteResources {
       }
       if ([...this.tabs.values()].some(record => record.pending.size)) this.schedule();
     })().catch((error) => {
-      this.ready = null;
+      if (generation === this.generation) this.ready = null;
       throw error;
     });
     return this.ready;
   }
 
   observeTab(tabId, url) {
-    const host = resourceHost(url);
+    return this.trackHost(tabId, resourceHost(url));
+  }
+
+  trackHost(tabId, host) {
     if (!Number.isInteger(tabId) || tabId < 0 || !host) {
       this.tabs.delete(tabId);
       return null;
@@ -108,17 +112,22 @@ export class SiteResources {
 
   async observe(details) {
     if (details.incognito || details.tabId < 0) return;
+    const generation = this.generation;
+    const host = resourceHost(details.url);
+    if (!host && details.type !== 'main_frame') return;
     await this.init();
+    if (generation !== this.generation) return;
     let record = this.tabs.get(details.tabId);
     if (details.type === 'main_frame') {
-      record = this.observeTab(details.tabId, details.url);
-      if (record) { record.needsReload = false; this.schedule(); }
+      const previous = record;
+      record = this.trackHost(details.tabId, host);
+      if (record !== previous || record?.needsReload) this.schedule();
+      if (record) record.needsReload = false;
     } else if (!record) {
       const tab = await callApi(chrome.tabs, 'get', details.tabId);
-      if (!tab || tab.incognito) return;
+      if (generation !== this.generation || !tab || tab.incognito) return;
       record = this.observeTab(tab.id, tab.url);
     }
-    const host = resourceHost(details.url);
     if (!record || !host || record.hosts.has(host)) return;
     if (record.hosts.size >= MAX_HOSTS) { record.limited = true; return; }
     record.hosts.add(host);
@@ -155,24 +164,54 @@ export class SiteResources {
     this.schedule();
   }
 
-  async persist() {
-    const snapshot = { needsApply: this.needsApply };
-    for (const [id, record] of this.tabs) {
-      snapshot[id] = { root: record.root, hosts: [...record.hosts], needsReload: record.needsReload };
-    }
-    await callApi(chrome.storage?.session, 'set', { [SESSION_KEY]: snapshot });
+  enqueuePersistence(task) {
+    // A failed batch can call persist outside the rule queue. Serialize both
+    // storage mutations so an outstanding set cannot outlive a reset's remove.
+    const next = this.persistenceQueue.then(task);
+    this.persistenceQueue = next.catch(() => {});
+    return next;
+  }
+
+  persist() {
+    return this.enqueuePersistence(async () => {
+      const storage = chrome.storage?.session;
+      if (!storage?.set) return;
+      const previous = this.persistedSnapshot;
+      // Check only the fields stored under the legacy key. In particular, a
+      // reconsideration may change pending work without changing the snapshot.
+      if (previous && previous.needsApply === this.needsApply &&
+          Object.keys(previous).length === this.tabs.size + 1 &&
+          [...this.tabs].every(([id, record]) => {
+            const saved = previous[id];
+            if (!saved || saved.root !== record.root || saved.needsReload !== record.needsReload ||
+                saved.hosts.length !== record.hosts.size) return false;
+            let index = 0;
+            for (const host of record.hosts) {
+              if (saved.hosts[index++] !== host) return false;
+            }
+            return true;
+          })) return;
+
+      const snapshot = { needsApply: this.needsApply };
+      for (const [id, record] of this.tabs) {
+        snapshot[id] = { root: record.root, hosts: [...record.hosts], needsReload: record.needsReload };
+      }
+      this.persistedSnapshot = null;
+      await callApi(storage, 'set', { [SESSION_KEY]: snapshot });
+      this.persistedSnapshot = snapshot;
+    });
   }
 
   async flush() {
     const rulesRevision = this.rulesRevision;
     const batches = [...this.tabs.values()].filter((record) => record.pending.size)
       .map((record) => ({ record, hosts: [...record.pending] }));
-    const mods = await pacKitchen.getPacMods();
+    const mods = batches.length && proxyBackend.platform !== 'firefox' ? await pacKitchen.getPacMods() : null;
     // Avoid serializing/saving a large rule set for ordinary browsing.
-    if (proxyBackend.platform !== 'firefox' && hasOwnRoutes(mods) && !mods.ifNoMods &&
+    if (mods && hasOwnRoutes(mods) && !mods.ifNoMods &&
         mods.ifMindExceptions && hasUnassignedResources(mods, batches)) {
       await appState.ensureLocalStateInitialized();
-      let changed = false;
+      let changedRecords;
       const siteForDomain = {};
       const listForDomain = {};
       await pacKitchen.updatePacMods(async (current) => {
@@ -184,14 +223,16 @@ export class SiteResources {
         const activeRecords = new Set(this.tabs.values());
         const result = inheritResourceRules(current,
           batches.filter(({ record }) => activeRecords.has(record)), latest.ruleMeta);
-        changed = result.changedRecords.size > 0;
-        if (!changed) return current;
+        changedRecords = result.changedRecords;
+        if (!changedRecords.size) return current;
         Object.assign(siteForDomain, result.siteForDomain);
         Object.assign(listForDomain, result.listForDomain);
-        for (const record of result.changedRecords) record.needsReload = true;
         return { ...current, exceptions: result.exceptions, domainProxyIds: result.domainProxyIds };
       }, { source: 'auto', siteForDomain, listForDomain, copyOnWrite: true });
-      if (changed) this.needsApply = true;
+      if (changedRecords?.size) {
+        for (const record of changedRecords) record.needsReload = true;
+        this.needsApply = true;
+      }
     }
     if (this.needsApply) {
       const applied = await settingsCoordinator.apply();
@@ -214,7 +255,8 @@ export class SiteResources {
       (proxyBackend.platform === 'firefox' ? 'tab' : 'domains') : 'domain';
     const record = this.tabs.get(tabId);
     if (record && record.root !== (utils.getRootDomain(domain) || domain)) return null;
-    const tab = await callApi(chrome.tabs, 'get', tabId);
+    const tab = Number.isInteger(tabId) && tabId >= 0
+      ? await callApi(chrome.tabs, 'get', tabId).catch(() => null) : null;
     const inheritResources = inheritsSiteResources(mods, record?.root || utils.getRootDomain(domain) || domain);
     const canInheritResources = Boolean(record && isCanonicalSiteRoot(record.root) && tab && !tab.incognito && routing !== 'domain' && mods.ifMindExceptions !== false);
     if (!record) {
@@ -403,14 +445,24 @@ export class SiteResources {
   }
 
   async clear() {
+    const generation = ++this.generation;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    await this.enqueue(async () => {
+    this.ready = this.enqueue(async () => {
       this.tabs.clear();
       this.lastError = '';
       this.needsApply = false;
-      await callApi(chrome.storage?.session, 'remove', SESSION_KEY);
+      await this.enqueuePersistence(async () => {
+        this.persistedSnapshot = null;
+        const storage = chrome.storage?.session;
+        if (!storage?.remove) return;
+        await callApi(storage, 'remove', SESSION_KEY);
+        // Don't recreate the key on a subsequent empty flush.
+        this.persistedSnapshot = { needsApply: false };
+      });
     });
+    try { await this.ready; }
+    finally { if (generation === this.generation) this.ready = null; }
   }
 
   setup() {
@@ -419,22 +471,34 @@ export class SiteResources {
     const report = (error) => console.warn('[Site resources]', error.message);
     chrome.webRequest?.onBeforeRequest?.addListener(
       (details) => { this.observe(details).catch(report); },
-      { urls: ['<all_urls>'] }
+      { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }
     );
     chrome.tabs?.onRemoved?.addListener((id) => {
-      this.tabs.delete(id);
-      this.schedule();
+      return this.init().then(() => {
+        if (this.tabs.delete(id)) this.schedule();
+      }).catch(report);
     });
     chrome.tabs?.onUpdated?.addListener((id, change, tab) => {
       if (!change.url) return;
-      if (tab.incognito) this.tabs.delete(id);
-      else this.observeTab(id, change.url);
-      this.schedule();
+      return this.init().then(() => {
+        const previous = this.tabs.get(id);
+        if (tab.incognito) this.tabs.delete(id);
+        else this.observeTab(id, change.url);
+        if (previous !== this.tabs.get(id)) this.schedule();
+      }).catch(report);
     });
     chrome.storage?.onChanged?.addListener((changes, area) => {
       if (area === 'local' && changes['pac-kitchen-mods']) {
         const { oldValue, newValue } = changes['pac-kitchen-mods'];
-        // Catalog labels and the new-rule default do not alter existing routes.
+        // Reset already clears the tracker before removing local settings.
+        if (newValue === undefined) return;
+        // Catalog labels, history-only edits and the default for new rules
+        // do not alter existing routes. Current writers version rule mutations.
+        if (oldValue && newValue && [oldValue, newValue].every(value =>
+          Number.isSafeInteger(value._revision) && Number.isSafeInteger(value._rulesRevision))) {
+          if (ROUTING_FIELDS.every(key => oldValue[key] === newValue[key])) return;
+          return this.reconsider().catch(report);
+        }
         // Compare all other persisted fields, including compact rule/history
         // provenance, without depending on the particular storage codec.
         const routingSnapshot = (value) => {
@@ -445,7 +509,6 @@ export class SiteResources {
         return this.reconsider().catch(report);
       }
     });
-    this.init().catch(report);
   }
 }
 

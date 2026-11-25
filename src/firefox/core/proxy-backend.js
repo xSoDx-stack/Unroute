@@ -1,5 +1,7 @@
 'use strict';
 
+import { addBrowserListener, callBrowserMethod } from './browser-api.js';
+
 const PRIVATE_BROWSING_ERROR_CODE = 'FIREFOX_PRIVATE_BROWSING_REQUIRED';
 const PAC_MIME_TYPE = 'application/x-ns-proxy-autoconfig';
 const REVOKE_DELAY_MS = 1000;
@@ -9,31 +11,9 @@ let activePacUrl = '';
 let activeMandatory = false;
 
 function callProxySetting(method, details) {
-  return new Promise((resolve, reject) => {
-    const settings = chrome.proxy && chrome.proxy.settings;
-    if (!settings || typeof settings[method] !== 'function') {
-      reject(new Error(chrome.i18n?.getMessage('firefoxUnsupportedProxySetting', [method]) ||
-        `Firefox не поддерживает proxy.settings.${method}()`));
-      return;
-    }
-
-    settings[method](details, (result) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(result);
-    });
-  });
-}
-
-function addEventListener(event, listener) {
-  if (!event || typeof event.addListener !== 'function') return false;
-  if (typeof event.hasListener === 'function' && event.hasListener(listener)) {
-    return true;
-  }
-  event.addListener(listener);
-  return true;
+  return callBrowserMethod(chrome.proxy?.settings, method, [details], () =>
+    chrome.i18n?.getMessage('firefoxUnsupportedProxySetting', [method]) ||
+    `Firefox не поддерживает proxy.settings.${method}()`);
 }
 
 function revokePacUrlLater(url) {
@@ -69,25 +49,6 @@ function createPrivateBrowsingError() {
   return error;
 }
 
-function openOptionsInAddonsManager() {
-  return new Promise((resolve, reject) => {
-    const opener = chrome.runtime && chrome.runtime.openOptionsPage;
-    if (typeof opener !== 'function') {
-      reject(new Error(chrome.i18n?.getMessage('firefoxManagementUnavailable') ||
-        'Firefox не предоставил доступ к странице управления расширением'));
-      return;
-    }
-
-    opener.call(chrome.runtime, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 async function assertPrivateBrowsingAccess() {
   if (!await isPrivateBrowsingAllowed()) {
     throw createPrivateBrowsingError();
@@ -118,7 +79,9 @@ export const proxyBackend = {
   privateBrowsingErrorCode: PRIVATE_BROWSING_ERROR_CODE,
 
   async openPrivateBrowsingSettings() {
-    await openOptionsInAddonsManager();
+    await callBrowserMethod(chrome.runtime, 'openOptionsPage', [], () =>
+      chrome.i18n?.getMessage('firefoxManagementUnavailable') ||
+      'Firefox не предоставил доступ к странице управления расширением');
   },
 
   async getSettings() {
@@ -212,11 +175,11 @@ export const proxyBackend = {
   },
 
   addSettingsChangeListener(listener) {
-    return addEventListener(chrome.proxy?.settings?.onChange, listener);
+    return addBrowserListener(chrome.proxy?.settings?.onChange, listener);
   },
 
   addErrorListener(listener) {
-    return addEventListener(chrome.proxy?.onError, listener);
+    return addBrowserListener(chrome.proxy?.onError, listener);
   },
 
   async getCapabilities() {

@@ -31,6 +31,12 @@ export function formatRoutingError(code) {
       return t('mpErrorUnavailable', 'Выберите включённый прокси, разрешённый текущими ограничениями.');
     case 'PROXY_REPLACEMENT_REQUIRED':
       return t('mpErrorReplacement', 'Перед удалением выберите прокси для переноса привязанных сайтов и настройки по умолчанию.');
+    case 'PROXY_INVALID_FAILOVER':
+      return t('mpErrorFailover', 'Некорректный режим резервирования для сайтов с собственным прокси.');
+    case 'REVISION_CONFLICT':
+      return t('mpErrorResourceRevision', 'Правила ресурсов изменились. Обновите данные и повторите действие.');
+    case 'RESOURCE_INHERITANCE_UNAVAILABLE':
+      return t('mpErrorResourceInheritance', 'Наследование маршрута для этого сайта недоступно при текущих настройках.');
     case 'RULES_REVISION_REQUIRED':
     case 'RULES_CONFLICT':
       return t('mpErrorConflict', 'Список изменён или устарел. Обновите данные и повторите действие; черновик сохранён.');
@@ -38,6 +44,8 @@ export function formatRoutingError(code) {
       return t('mpErrorChoice', 'Выберите прокси для новых сайтов.');
     case 'INVALID_DOMAIN_LIST':
       return t('dlErrorInvalid', 'Некорректные данные листа. Проверьте название, домены и порядок листов.');
+    case 'DOMAIN_LIST_NAME_EXISTS':
+      return t('dlNameExists', 'Лист с таким названием уже существует. Выберите другое имя.');
     case 'DOMAIN_LIST_UNKNOWN':
       return t('dlErrorUnknown', 'Лист больше не существует. Обновите данные и повторите действие.');
     case 'INVALID_DOMAIN_MUTATION':

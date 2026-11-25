@@ -1,12 +1,16 @@
 'use strict';
 
 import { t } from './i18n.js';
+import { webHost } from './web-host.js';
 
 import { getDomain } from '../vendor/tldts.esm.js';
 
 export function getRootDomain(hostname) {
   if (!hostname || typeof hostname !== 'string') return '';
-  let host = hostname.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+  let host = hostname.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (host.startsWith('[') || host.indexOf(':') === host.lastIndexOf(':')) {
+    host = host.replace(/:\d+$/, '');
+  }
   host = host.replace(/^\.+|\.+$/g, '');
   if (host.startsWith('www.')) {
     host = host.slice(4);
@@ -121,13 +125,10 @@ export function parseProxyScheme(proxyAsStringRaw, defaultType = 'HTTPS') {
   // Reject whitespace, URL delimiters and malformed IP literals before they
   // can become an invalid PAC proxy directive. URL also canonicalizes IDNs.
   if (/[\s/?#@"'\\]/.test(hostname)) return null;
-  try {
-    hostname = new URL(`http://${hostname}/`).hostname.toLowerCase().replace(/\.$/, '');
-  } catch {
-    return null;
-  }
+  hostname = webHost(`http://${hostname}/`).toLowerCase().replace(/\.$/, '');
   if (!hostname) return null;
 
+  if (!/^\d+$/.test(portStr)) return null;
   const portNum = Number(portStr);
   if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
     return null; // invalid port out of range
@@ -152,10 +153,15 @@ export function parseProxyScheme(proxyAsStringRaw, defaultType = 'HTTPS') {
   };
 }
 
+// Legacy list entries and endpoint identities accept the PAC spelling.
+function parseProxyListEntry(text) {
+  return parseProxyScheme(text.replace(/^PROXY\s+/i, 'HTTP '));
+}
+
 // Credential-free identity only. Never use normalized aliases as transport
 // addresses: localhost/IPv6 listeners may differ from an IPv4 connection.
 export function proxyEndpointKey(value) {
-  const parsed = typeof value === 'string' ? parseProxyScheme(value.replace(/^PROXY\s+/i, 'HTTP ')) : value;
+  const parsed = typeof value === 'string' ? parseProxyListEntry(value) : value;
   if (!parsed) return '';
   const type = parsed.type === 'HTTP' ? 'PROXY' : parsed.type === 'SOCKS4' ? 'SOCKS' : parsed.type;
   const host = parsed.hostname === 'localhost' || parsed.hostname === '[::1]' ? '127.0.0.1' : parsed.hostname;
@@ -198,6 +204,26 @@ export function parseProxyHostInput(rawHost, rawPort = '') {
   return host ? { host, port } : null;
 }
 
+// Return entry spans so callers can edit a connection without reformatting the list.
+// A hash at the start of a segment or after whitespace comments out the rest
+// of the physical line; a hash inside a credential is literal.
+export function getRawProxyEntries(raw) {
+  if (typeof raw !== 'string') return [];
+  const entries = [];
+  for (const line of raw.matchAll(/[^\r\n]+/g)) {
+    for (const segment of line[0].matchAll(/[^;]+/g)) {
+      const comment = /(?:^|\s)#/.exec(segment[0]);
+      const text = segment[0].slice(0, comment ? comment.index : undefined).trim();
+      if (text) {
+        const start = line.index + segment.index + segment[0].indexOf(text);
+        entries.push({ text, start, end: start + text.length });
+      }
+      if (comment) break;
+    }
+  }
+  return entries;
+}
+
 /**
  * Parses raw multi-line custom proxy string using the single canonical parser.
  *
@@ -205,16 +231,9 @@ export function parseProxyHostInput(rawHost, rawPort = '') {
  * @returns {Array<object>}
  */
 export function parseCustomProxies(rawString = '') {
-  if (!rawString || typeof rawString !== 'string') return [];
-  const lines = rawString
-    .replace(/#.*$/gm, '')
-    .split(/(?:\s*(?:;\r?\n)+\s*|\r?\n+|;\s*)+/g)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
   const result = [];
-  for (const line of lines) {
-    const parsed = parseProxyScheme(line);
+  for (const { text } of getRawProxyEntries(rawString)) {
+    const parsed = parseProxyListEntry(text);
     if (parsed) {
       result.push(parsed);
     }

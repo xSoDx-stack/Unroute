@@ -14,6 +14,8 @@ await fs.mkdir(output, { recursive: true });
 const date = new Date('2000-01-01T00:00:00Z');
 
 async function add(zip, absolute, relative) {
+  assert.ok(!/(^|\/)(?:node_modules|\.git|\.env(?:\..*)?)($|\/)|\.(?:pem|key|p12|pfx)$/i.test(relative),
+    `Excluded private or dependency path: ${relative}`);
   const stat = await fs.lstat(absolute);
   assert.ok(!stat.isSymbolicLink(), `Symlinks are not allowed in submissions: ${relative}`);
   if (stat.isDirectory()) {
@@ -22,8 +24,6 @@ async function add(zip, absolute, relative) {
     }
   } else {
     assert.ok(stat.isFile(), `Not a regular file: ${relative}`);
-    assert.ok(!/(^|\/)(?:node_modules|\.git|\.env(?:\..*)?)($|\/)|\.(?:pem|key|p12|pfx)$/i.test(relative),
-      `Excluded private or dependency file: ${relative}`);
     zip.file(relative, await fs.readFile(absolute), { date, createFolders: false });
   }
 }

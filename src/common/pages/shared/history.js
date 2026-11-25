@@ -6,7 +6,7 @@ import { sendMessage } from './client.js';
 
 const histories = new WeakMap();
 function historyState(container) {
-  if (!histories.has(container)) histories.set(container, { generation: 0, read: 0 });
+  if (!histories.has(container)) histories.set(container, { generation: 0, read: 0, undoing: false, undoButtons: new Set() });
   return histories.get(container);
 }
 
@@ -14,6 +14,7 @@ export function invalidateHistory(container) {
   if (!container) return;
   const state = historyState(container);
   state.generation++; state.read++;
+  state.undoButtons.clear();
   container.replaceChildren();
 }
 
@@ -27,8 +28,12 @@ export async function renderHistory(container, notify = () => {}, afterUndo = ()
   const read = ++state.read, generation = state.generation;
   const response = await sendMessage({ action: 'GET_RULE_HISTORY' });
   if (read !== state.read) return;
+  state.undoButtons.clear();
   container.replaceChildren();
-  if (!response.success) { container.textContent = response.error; return; }
+  if (!response.success || !Array.isArray(response.data)) {
+    container.textContent = response.error || t('msg_failed_to_load_data_de4395f1', 'Не удалось загрузить данные.');
+    return;
+  }
   if (!response.data.length) { container.textContent = t("msg_rule_changes_will_appear_here_existing_settin_d9e351cf", "Здесь появятся изменения правил. Старые настройки сохранены."); return; }
   for (const item of response.data) {
     const row = document.createElement('article');
@@ -40,18 +45,26 @@ export async function renderHistory(container, notify = () => {}, afterUndo = ()
     detail.textContent = t("msg_sub_rules_sub_sub_2e625462", "$1 · правил: $2$3", [new Date(item.at).toLocaleString(uiLocale()), item.count, item.undoneAt ? t("msg_undone_c2ac555c", " · отменено") : item.truncated ? t("msg_undo_unavailable_for_a_large_batch_2a4e0aca", " · отмена недоступна для большого пакета") : '']);
     description.append(title, detail);
     const undo = document.createElement('button');
+    undo.type = 'button';
     undo.className = 'btn btn-secondary btn-sm';
     undo.textContent = item.undoneAt ? t("msg_undone_23a2a9bf", "Отменено") : t("msg_undo_7c47f729", "Отменить");
-    undo.disabled = Boolean(item.undoneAt || item.truncated);
+    const canUndo = !item.undoneAt && !item.truncated;
+    if (canUndo) state.undoButtons.add(undo);
+    undo.disabled = !canUndo || state.undoing;
     undo.addEventListener('click', async () => {
-      if (read !== state.read || generation !== state.generation) return;
-      undo.disabled = true;
-      const result = await sendMessage({ action: 'UNDO_RULE_CHANGE', id: item.id });
-      if (generation !== state.generation) return;
-      notify(result.success ? t("msg_restored_sub_later_edits_retained_sub_2419a5d4", "Восстановлено: $1. Последующих правок сохранено: $2.", [result.data.restored, result.data.skipped]) : result.error);
-      await renderHistory(container, notify, afterUndo);
-      if (generation !== state.generation) return;
-      await afterUndo();
+      if (!canUndo || state.undoing || read !== state.read || generation !== state.generation) return;
+      state.undoing = true;
+      for (const button of state.undoButtons) button.disabled = true;
+      try {
+        const result = await sendMessage({ action: 'UNDO_RULE_CHANGE', id: item.id });
+        if (generation !== state.generation) return;
+        notify(result.success ? t("msg_restored_sub_later_edits_retained_sub_2419a5d4", "Восстановлено: $1. Последующих правок сохранено: $2.", [result.data.restored, result.data.skipped]) : result.error);
+        await renderHistory(container, notify, afterUndo);
+        if (generation === state.generation) await afterUndo();
+      } finally {
+        state.undoing = false;
+        for (const button of state.undoButtons) button.disabled = false;
+      }
     });
     row.append(description, undo);
     container.append(row);

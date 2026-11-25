@@ -8,9 +8,20 @@ describe('Appearance CSS fallback', () => {
     expect(css).include('--brand-mint: #78c6b0;');
     expect(css).include(':root[data-theme="light"]');
     expect(css).include(':root[data-theme="dark"]');
-    for (const key of ['brand-cyan', 'brand-violet', 'brand-gradient', 'accent-gradient', 'focus-ring', 'radius-full', 'shadow-sm', 'transition']) {
+    for (const key of ['brand-cyan', 'brand-violet', 'brand-gradient', 'accent-gradient', 'focus-ring', 'radius-full', 'shadow-sm', 'transition', 'status-on', 'status-off', 'status-warn', 'status-err']) {
       expect(css).include(`--${key}:`);
     }
+  });
+  it('keeps static CSS fallback tokens identical to getPalette defaults for dark and light themes', async () => {
+    const css = fs.readFileSync(new URL('../src/common/pages/shared/theme.css', import.meta.url), 'utf8');
+    const { getPalette } = await import('../src/common/pages/shared/appearance.js');
+    const parseVars = block => Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*([^;]+);/g)].map(([, k, v]) => [k, v.trim()]));
+    const darkBlock = parseVars(css.match(/:root\s*\{([\s\S]*?)\n\}/)[1]);
+    const mediaLightBlock = parseVars(css.match(/@media\s*\(prefers-color-scheme:\s*light\)\s*\{\s*:root:not\(\[data-theme="dark"\]\)\s*\{([\s\S]*?)\n\}/)[1]);
+    const explicitLightBlock = parseVars(css.match(/:root\[data-theme="light"\]\s*\{([\s\S]*?)\n\}/)[1]);
+    expect(mediaLightBlock).to.deep.equal(explicitLightBlock);
+    for (const [key, value] of Object.entries(getPalette({ theme: 'dark' }))) expect(darkBlock[key], `dark --${key}`).to.equal(value);
+    for (const [key, value] of Object.entries(getPalette({ theme: 'light' }))) expect(explicitLightBlock[key], `light --${key}`).to.equal(value);
   });
 });
 

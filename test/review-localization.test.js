@@ -42,6 +42,17 @@ describe('Review localization regressions', () => {
     }
   });
 
+  it('localizes fallback policy, stale resource revisions and unavailable inheritance', () => {
+    for (const locale of ['ru', 'en']) {
+      useLocale(locale);
+      for (const [code, key] of Object.entries({
+        PROXY_INVALID_FAILOVER: 'mpErrorFailover',
+        REVISION_CONFLICT: 'mpErrorResourceRevision',
+        RESOURCE_INHERITANCE_UNAVAILABLE: 'mpErrorResourceInheritance',
+      })) expect(formatRoutingError(code), code).to.equal(catalogs[locale][key]?.message).and.not.equal('');
+    }
+  });
+
   it('keeps count-sensitive Russian messages grammatical without changing substitution contracts', () => {
     const expected = {
       msg_warning_sub_of_your_sub_proxies_are_unavailab_17a33ccc: 'Внимание: недоступных прокси: $param_1$ из $param_2$.',

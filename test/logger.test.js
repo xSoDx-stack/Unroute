@@ -4,6 +4,17 @@ import { expect } from 'chai';
 import { logger, sanitizeLogString, sanitizeLogData } from '../src/common/core/logger.js';
 
 describe('Logger: sanitizeLogString & sanitizeLogData', () => {
+  it('redacts complete credential fields and keeps useful diagnostic context', () => {
+    expect(sanitizeLogString('HTTPS fixture:a@b/c@proxy.test:443')).to.equal('HTTPS ***:***@proxy.test:443');
+    expect(sanitizeLogString('{"password": "two words", "status": 407}')).to.equal('{"password": "***", "status": 407}');
+  });
+
+  it('formats repeated object references without losing independent fields', () => {
+    const shared = { host: 'proxy.test' };
+    const details = { first: shared, second: shared };
+    details.parent = details;
+    expect(sanitizeLogData(details)).to.deep.equal({ first: shared, second: shared, parent: '[Circular]' });
+  });
   it('should mask user:pass@ in proxy and URL strings', () => {
     const raw = 'Connecting to HTTPS mylogin:secretpassword123@proxy.example.com:443';
     const sanitized = sanitizeLogString(raw);
@@ -83,8 +94,8 @@ describe('Logger: sanitizeLogString & sanitizeLogData', () => {
         'Браузер не смог установить соединение с прокси-сервером',
       );
 
-      expect(repeated).to.equal(first);
-      expect(first.count).to.equal(2);
+      expect(repeated.id).to.equal(first.id);
+      expect(repeated.count).to.equal(2);
       expect(logger.getLogs()).to.have.lengthOf(1);
     } finally {
       logger.scheduleSave = originalScheduleSave;
@@ -120,8 +131,8 @@ describe('Logger: sanitizeLogString & sanitizeLogData', () => {
         groupKey: 'github.com|main_frame',
       });
 
-      expect(repeated).to.equal(first);
-      expect(first.count).to.equal(2);
+      expect(repeated.id).to.equal(first.id);
+      expect(repeated.count).to.equal(2);
       expect(logger.getLogs()).to.have.lengthOf(2);
     } finally {
       logger.scheduleSave = originalScheduleSave;

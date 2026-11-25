@@ -1,0 +1,83 @@
+name: Publish Chrome on CWS
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Specific release version, e.g. 3.0.2
+        required: true
+        type: string
+      publish_type:
+        description: Chrome Web Store publishType (DEFAULT_PUBLISH or STAGED_PUBLISH)
+        required: false
+        type: string
+        default: DEFAULT_PUBLISH
+    secrets:
+      CWS_CLIENT_ID:
+        required: true
+      CWS_CLIENT_SECRET:
+        required: true
+      CWS_REFRESH_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Specific release version from GitHub Releases, e.g. 3.0.2
+        required: true
+        type: string
+      publish_type:
+        description: Chrome Web Store publishType
+        required: false
+        type: choice
+        default: DEFAULT_PUBLISH
+        options:
+          - DEFAULT_PUBLISH
+          - STAGED_PUBLISH
+      dry_run:
+        description: Verify archive and check CWS status without uploading or publishing
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unroute-cws-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: vars.CWS_PUBLISH_ENABLED == 'true'
+    name: Submit Chrome MV3 release to Chrome Web Store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted publication tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Upload and submit extension to Chrome Web Store
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CWS_VERSION: ${{ inputs.version }}
+          CWS_PUBLISH_TYPE: ${{ inputs.publish_type || 'DEFAULT_PUBLISH' }}
+          CWS_DRY_RUN: ${{ inputs.dry_run == true }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: node .github/scripts/cws-release.mjs

@@ -10,14 +10,16 @@ button { font: inherit; cursor: pointer; color: inherit; border: 1px solid var(-
 button:hover:not(:disabled) { background: var(--bg-surface-hover); }
 button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 [hidden] { display: none !important; }
 header { display: flex; flex-shrink: 0; align-items: center; gap: 9px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--border-color); }
 .brand { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 14px; font-weight: 650; letter-spacing: -.3px; }
 .brand img { width: 24px; height: 24px; flex-shrink: 0; }
 .status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
-.status::before { content: ''; width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #dc2626; }
-.status.active::before { background: #16a34a; }
+.status::before { content: ''; box-sizing: border-box; width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--status-off); background: transparent; }
+.status.active::before { border-color: var(--status-on); background: var(--status-on); }
+.status.warning::before { border-color: var(--status-warn); background: var(--status-warn); }
+.status.error::before { border-color: var(--status-err); background: var(--status-err); }
 main { padding: 20px 16px 0; min-height: 0; overflow-y: auto; }
 .eyebrow, small { font-size: 11px; color: var(--text-secondary); }
 .eyebrow { margin-bottom: 6px; }
@@ -50,14 +52,14 @@ li { display: flex; align-items: center; justify-content: space-between; gap: 12
 .resource-mode-switch input:checked + label { color: var(--accent-text); background: var(--accent-soft); font-weight: 600; }
 .resource-mode-switch input:not(:disabled) + label:hover { background: var(--bg-surface-hover); }
 .resource-mode-switch input:not(:disabled) + label:active { background: var(--bg-surface-active); }
-.resource-mode-switch input:focus-visible + label { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.resource-mode-switch input:focus-visible + label { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .resource-mode-switch input:disabled + label { cursor: default; }
 .resource-inheritance.disabled { opacity: .6; cursor: default; }
 .resource-proxy,.site-proxy { flex: 0 0 125px; width: 125px; min-width: 0; height: 26px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); font: 11px "Segoe UI", system-ui, sans-serif; text-overflow: ellipsis; cursor: pointer; transition: var(--transition); }
 .site-proxy { width: 100%; height: 34px; padding: 6px 10px; font-size: 12px; }
 .resource-proxy:hover:not(:disabled),.site-proxy:hover:not(:disabled) { background: var(--bg-surface-hover); }
 .resource-proxy:active:not(:disabled),.site-proxy:active:not(:disabled) { background: var(--bg-surface-active); }
-.resource-proxy:focus-visible,.site-proxy:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.resource-proxy:focus-visible,.site-proxy:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .resource-proxy:disabled,.site-proxy:disabled { opacity: .5; cursor: default; }
 .proxy-name-control { position: relative; display: inline-block; flex: 0 0 125px; width: 125px; max-width: 100%; }
 .proxy-name-control > select { width: 100%; appearance: none; color: transparent; }

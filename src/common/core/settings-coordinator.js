@@ -44,6 +44,26 @@ export const settingsCoordinator = {
     return result;
   },
   async history() { return describeHistory(await pacKitchen.getRawPacMods()); },
+  clearPac(ensureCurrent) {
+    const resettingError = () => new Error(t("msg_settings_are_being_reset_3089ff9b", "Выполняется сброс настроек"));
+    if (resetting) return Promise.reject(resettingError());
+    const expectedGeneration = generation;
+    const checkGeneration = () => {
+      ensureCurrent();
+      if (expectedGeneration !== generation) throw resettingError();
+    };
+    // Only the public clear enters this queue. Sync and reset can clear PAC
+    // internally without waiting on an application that is waiting on them.
+    const result = applying.then(async () => {
+      checkGeneration();
+      await pacSync.drainPendingSync();
+      checkGeneration();
+      await pacSync.clearPac();
+      await applicationState.applied((await pacKitchen.getRawPacMods())._revision || 0);
+    });
+    applying = result.catch(() => {});
+    return result;
+  },
   async drainForReset() {
     resetting = true;
     generation++;

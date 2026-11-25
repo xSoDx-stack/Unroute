@@ -5,6 +5,7 @@ import { sanitizeSiteResourceInheritance } from './site-resource-policy.js';
 import { decodeSettings } from './settings-codec.js';
 import { reconcileProxyProfiles, getProxyCatalog } from './proxy-profiles.js';
 import { normalizeDomainLists, normalizeListDomains } from './domain-lists.js';
+import { normalizeDomainRule } from './domain-rules.js';
 
 export const SETTINGS_SCHEMA_VERSION = 3;
 const EMPTY_DOMAINS = Object.freeze([]);
@@ -72,7 +73,10 @@ function normalizeMeta(raw, legacy) {
   const normalized = {};
   for (const [key, value] of Object.entries(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {})) {
     if (!/^(exception|whitelist|proxy|pac):.{1,253}$/.test(key)) continue;
-    const valid = controlMetadata(value, key.slice(key.indexOf(':') + 1), legacy);
+    const domain = key.slice(key.indexOf(':') + 1);
+    // Provenance belongs to the exact stored rule key, not an alias of it.
+    if (normalizeDomainRule(domain).domain !== domain) continue;
+    const valid = controlMetadata(value, domain, legacy);
     if (valid) normalized[key] = valid;
   }
   trustedMeta.add(normalized);
@@ -237,7 +241,11 @@ export function clearRuleHistory(raw) {
   const entries = Object.entries(currentMeta);
   const retained = entries.filter(([key, meta]) => {
     const domain = key.slice(key.indexOf(':') + 1);
-    return meta.suppressAuto || (key.startsWith('pac:') ? pacBypassDomains.has(domain) : key.startsWith('whitelist:') ? whitelist.has(domain) : Object.hasOwn(raw.exceptions || {}, domain));
+    if (meta.suppressAuto) return true;
+    if (key.startsWith('pac:')) return pacBypassDomains.has(domain);
+    if (key.startsWith('whitelist:')) return whitelist.has(domain);
+    if (key.startsWith('proxy:')) return Object.hasOwn(raw.domainProxyIds || {}, domain);
+    return Object.hasOwn(raw.exceptions || {}, domain);
   });
   const ruleMeta = retained.length === entries.length ? currentMeta : Object.fromEntries(retained);
   return { ...raw, ruleHistory: [], ruleMeta };

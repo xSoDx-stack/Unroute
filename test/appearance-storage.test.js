@@ -7,7 +7,7 @@ function fixture({ delayRead = false, failRead = false, failWrite = false, promi
   const root = { dataset: {}, style: { setProperty: (key, value) => style.set(key, value) } };
   const emit = (value, area = 'local') => { if (area === 'local') values = value === undefined ? {} : { ...values, 'ui-appearance': value }; listener?.({ 'ui-appearance': { newValue: value } }, area); };
   const api = { runtime: {}, storage: {
-    onChanged: { addListener(fn) { listener = fn; } },
+    onChanged: { addListener(fn) { listener = fn; }, removeListener(fn) { if (fn === listener) listener = undefined; } },
     local: {
       remove(key, cb) { emit(undefined); cb(); },
       get(key, cb) {
@@ -29,17 +29,37 @@ function fixture({ delayRead = false, failRead = false, failWrite = false, promi
       },
     },
   } };
-  const media = { matches: false, addEventListener(_, fn) { mediaListener = fn; } };
+  const media = { matches: false, addEventListener(_, fn) { mediaListener = fn; },
+    removeEventListener(_, fn) { if (fn === mediaListener) mediaListener = undefined; } };
   return { api, root, media, style, emit, writes, resolveRead: () => initialRead(), complete: () => complete(),
     resetSignal(value, notify = true) {
       values = { 'ui-appearance-reset': value };
       if (notify) listener?.({ 'ui-appearance-reset': { newValue: value } }, 'local');
     },
-    dark: value => { media.matches = value; mediaListener(); }, maxWrites: () => maxWrites, values: () => values };
+    dark: value => { media.matches = value; mediaListener?.(); }, maxWrites: () => maxWrites, values: () => values,
+    watching: () => Boolean(listener || mediaListener) };
 }
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 describe('Appearance storage lifecycle', () => {
+  it('detaches watchers and drops pending writes when destroyed before startup completes', async () => {
+    const { createAppearanceController } = await import('../src/common/pages/shared/appearance.js');
+    const f = fixture({ delayRead: true });
+    const c = createAppearanceController({ chrome: f.api, root: f.root, media: f.media });
+    let lastStatus;
+    c.subscribe(state => { lastStatus = state.status; });
+    c.update({ accent: 'blue' });
+    expect(f.watching()).equal(true);
+    const writing = c.flush();
+    c.destroy(); c.destroy();
+    f.resolveRead();
+    await Promise.all([c.ready, writing]);
+    f.dark(true); f.emit({ theme: 'dark' });
+    expect(f.watching()).equal(false);
+    expect(lastStatus).equal('saving');
+    expect(f.root.dataset.theme).equal('light');
+    expect(f.writes).length(0);
+  });
   it('applies defaults, tracks the system live, and reads callback and promise APIs', async () => {
     const { createAppearanceController } = await import('../src/common/pages/shared/appearance.js');
     for (const promiseOnly of [false, true]) {
@@ -202,5 +222,31 @@ describe('Appearance storage lifecycle', () => {
       globalThis.document = { documentElement: f.root }; globalThis.chrome = f.api; globalThis.matchMedia = () => f.media;
       const a = initAppearance(); expect(initAppearance()).equal(a); await a.ready;
     } finally { Object.assign(globalThis, old); }
+  });
+  it('eliminates initial FOUC via synchronous cache while keeping chrome.storage.local authoritative', async () => {
+    const { createAppearanceController, APPEARANCE_KEY } = await import('../src/common/pages/shared/appearance.js');
+    const store = new Map([[APPEARANCE_KEY, JSON.stringify({ theme: 'dark', accent: 'custom', customColor: '#123456' })]]);
+    const cache = {
+      getItem: k => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+      removeItem: k => store.delete(k),
+    };
+    const f = fixture({ delayRead: true });
+    const c = createAppearanceController({ chrome: f.api, root: f.root, media: f.media, cache });
+    // Before async chrome.storage.local read resolves, cached theme and custom swatch are already applied.
+    expect(f.root.dataset.theme).equal('dark');
+    expect(f.style.get('--accent-primary')).equal('#123456');
+    expect(f.style.get('--custom-swatch')).equal('#123456');
+    // Authoritative empty storage clears stale cache upon resolution.
+    f.resolveRead();
+    await c.ready;
+    expect(f.root.dataset.theme).equal('light');
+    expect(store.has(APPEARANCE_KEY)).equal(false);
+    // Confirmed write updates synchronous cache; reset clears it.
+    c.update({ theme: 'dark', accent: 'blue' });
+    const saving = c.flush(); await tick(); f.complete(); await saving;
+    expect(JSON.parse(store.get(APPEARANCE_KEY))).to.deep.equal({ theme: 'dark', accent: 'blue', customColor: '#78c6b0' });
+    f.resetSignal('reset-cache');
+    expect(store.has(APPEARANCE_KEY)).equal(false);
   });
 });

@@ -21,6 +21,7 @@ import { sendChromeMessage } from './chrome-rpc.js';
 import { verifyMultiproxyRouting } from './multiproxy-scenario.js';
 import { checkLimitsAndHelp } from './limits-help-checks.js';
 import { verifyDomainListsNative } from './domain-lists-native-scenario.js';
+import { verifyProxyFailover } from './proxy-failover-scenario.js';
 
 const TEST_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const EXTENSION_ROOT = path.resolve(TEST_ROOT, '..', '..', 'dist', 'chromium');
@@ -459,6 +460,10 @@ async function runChromeSmoke() {
     if (process.env.UNROUTE_LIMIT_HELP_ONLY === '1') {
       await optionsPage.bringToFront();
       console.log('Chrome limits/help:', await optionsPage.evaluate(checkLimitsAndHelp));
+      return;
+    }
+    if (process.env.UNROUTE_PROXY_FAILOVER_ONLY === '1') {
+      await verifyProxyFailover(browser, optionsPage);
       return;
     }
     if (process.env.UNROUTE_DOMAIN_LISTS_ONLY === '1') {

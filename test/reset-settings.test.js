@@ -105,7 +105,7 @@ describe('Reset Settings & Ghost Data Prevention (Item 2)', () => {
     await storage.set('corrupt', 'old data');
     try {
       setupMessageBus();
-      const result = await new Promise(resolve => listener({ action: 'RESET_SETTINGS' }, { id: 'reset-test' }, resolve));
+      const result = await new Promise(resolve => listener({ action: 'RESET_SETTINGS' }, { id: 'reset-test', url: 'chrome-extension://reset-test/pages/options/index.html' }, resolve));
       expect(result.success).to.equal(true);
       expect(await storage.get('corrupt', null)).to.equal(null);
       expect(pacSync.currentPacProviderKey).to.equal('Антизапрет');

@@ -3,14 +3,22 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sendChromeMessage } from './chrome-rpc.js';
+import { verifyPortableSettings } from './portable-settings-scenario.js';
 
 // Real, independent HTTP proxy origins. No request interception, synthetic RPC
 // responses, or replacement routing implementation is used in this scenario.
-async function createProxy(label) {
+async function createProxy(label, credentials) {
   const requests = [];
+  const authorized = [];
   const server = http.createServer((request, response) => {
     requests.push(request.url);
     request.resume();
+    if (credentials && request.headers['proxy-authorization'] !== `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`) {
+      response.writeHead(407, { 'Proxy-Authenticate': 'Basic realm="Unroute edit fixture"', 'Connection': 'close' });
+      response.end();
+      return;
+    }
+    if (credentials) authorized.push(request.url);
     response.writeHead(200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store', 'Content-Type': 'text/plain', 'Connection': 'close' });
     response.end(`multiproxy-${label}`);
   });
@@ -18,7 +26,7 @@ async function createProxy(label) {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
-  return { label, server, requests, port: server.address().port };
+  return { label, server, requests, authorized, port: server.address().port };
 }
 
 export async function verifyMultiproxyRouting(browser, page, worker) {
@@ -488,8 +496,67 @@ export async function verifyMultiproxyRouting(browser, page, worker) {
     await page.$eval('[data-tab="proxies"]', button => button.click());
     assert.deepEqual(await page.$$eval('.proxy-profile-name', names => names.map(node => node.textContent)),
       ['Smoke A renamed', 'Smoke B'], 'The real proxy cards must display their persisted names');
-    assert.equal(await page.$$eval('.rename-proxy-btn, .delete-btn', buttons => buttons.some(button => button.disabled)),
+    assert.equal(await page.$$eval('.edit-proxy-btn, .delete-btn', buttons => buttons.some(button => button.disabled)),
       false, 'Named proxy cards must bind rename/delete controls to their stable IDs');
+
+    // Edit a saved connection through the actual packaged form. Rejected
+    // duplicates keep the complete draft; a successful endpoint/auth edit keeps
+    // its ID, assignments and reserve binding and must pass native HTTP auth.
+    const credentials = { username: 'edit-fixture-user', password: ' edited@fixture:password ' };
+    const editedProxy = await createProxy('Edited A', credentials);
+    proxies.push(editedProxy);
+    await ok({ action: 'MUTATE_DOMAIN_RULES', operations: [{ domain: 'edit-bound.test', mode: 'proxy', proxyId: a.id }] });
+    await ok({ action: 'SAVE_MODS', mods: { fallbackProxyId: a.id, ifProxyOrDie: true } });
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('.edit-proxy-btn:not(:disabled)'), polling);
+    await page.$eval('[data-tab="proxies"]', button => button.click());
+    await page.click('.edit-proxy-btn');
+    const form = '.proxy-connection-editor';
+    assert.equal(await page.$eval(`${form} [name="hasAuth"]`, input => input.checked), false);
+    assert.equal(await page.$eval(`${form} [name="username"]`, input => input.getClientRects().length), 0, 'no saved auth means no visible credential fields');
+    assert.equal(await page.$eval(form, editor => editor.closest('.proxy-item').querySelector('.proxy-actions').getClientRects().length), 0, 'active proxy actions are hidden');
+    const fill = async (name, value) => page.$eval(`${form} [name="${name}"]`, (input, value) => {
+      input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, String(value));
+    await fill('name', 'Edited A');
+    await fill('host', '127.0.0.1');
+    await fill('port', proxies[1].port);
+    await page.click(`${form} [name="hasAuth"]`);
+    assert.equal(await page.$eval(`${form} [name="username"]`, input => input.getClientRects().length > 0), true, 'checking auth reveals credentials');
+    await fill('username', credentials.username);
+    await fill('password', credentials.password);
+    await page.click(`${form} [type="submit"]`);
+    await page.waitForFunction(() => document.querySelector('.proxy-connection-error')?.textContent.length > 0, polling);
+    assert.equal(await page.$eval(form, editor => editor.closest('.proxy-item').querySelector('.proxy-actions').getClientRects().length), 0, 'rejected saves keep proxy actions hidden');
+    assert.equal(await page.$eval(`${form} [name="password"]`, input => input.value), credentials.password);
+    assert.equal((await snapshot()).proxyCatalog.find(profile => profile.id === a.id).endpoint, `PROXY 127.0.0.1:${proxies[0].port}`);
+    await fill('port', editedProxy.port);
+    await page.click(`${form} [type="submit"]`);
+    await page.waitForFunction(() => !document.querySelector('.proxy-connection-editor'), polling);
+    const edited = (await ok({ action: 'GET_STATE', includeExceptions: true })).data.pacMods;
+    assert.equal(edited.proxyCatalog.find(profile => profile.id === a.id).name, 'Edited A');
+    assert.equal(edited.proxyCatalog.find(profile => profile.id === a.id).endpoint, `PROXY 127.0.0.1:${editedProxy.port}`);
+    assert.equal(edited.domainProxyIds['edit-bound.test'], a.id);
+    assert.equal(edited.domainProxyIds['route-b.test'], b.id);
+    assert.equal(edited.defaultProxyId, b.id);
+    assert.equal(edited.fallbackProxyId, a.id);
+    await navigate('edit-bound.test', editedProxy);
+    assert.ok(editedProxy.authorized.some(url => url.includes('edit-bound.test')), 'The edited credentials must authenticate a real browser proxy request');
+    await page.bringToFront();
+    assert.equal(await page.$eval('.proxy-item .proxy-actions', node => node.getClientRects().length > 0), true, 'saved edits restore proxy actions');
+    await page.click('.edit-proxy-btn');
+    assert.equal(await page.$eval(`${form} [name="hasAuth"]`, input => input.checked), true, 'saved auth is enabled when reopening the editor');
+    assert.equal(await page.$eval(`${form} [name="username"]`, input => input.value), credentials.username);
+    assert.equal(await page.$eval(`${form} [name="password"]`, input => input.value), credentials.password);
+    await page.waitForSelector(`${form} [name="password"]`, { visible: true });
+    assert.equal(await page.evaluate(selector => document.querySelector(selector).getClientRects().length > 0, `${form} [name="password"]`), true);
+    // Focus-triggered state refresh can replace the editor before the click.
+    await page.locator(`${form} .proxy-editor-actions [type="button"]`).click();
+    assert.equal(await page.$eval('.proxy-item .proxy-actions', node => node.getClientRects().length > 0), true, 'cancelling restores proxy actions');
+    await verifyPortableSettings(browser, page, { primaryId: a.id, reserveId: b.id, password: credentials.password });
+    await navigate('edit-bound.test', editedProxy);
+    await ok({ action: 'SAVE_MODS', mods: { fallbackProxyId: null } });
+    console.log('Chrome saved proxy edit: duplicate rejected with draft retained; stable ID/default/assignments/reserve; changed endpoint and whitespace-bearing credentials passed native HTTP proxy authentication.');
   } finally {
     try {
       if (probe) await probe.close();

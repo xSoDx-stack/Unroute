@@ -1,5 +1,9 @@
 import { t } from '../../core/i18n.js';
 
+const HISTORY_UNDO_HELP = [".history-row button", () => t("settings_help_history_undo", "Отменить это изменение, сохранив последующие ручные правки.")];
+const APPLICATION_RETRY_HELP = ["#applicationBanner button", () => t("settings_help_apply_retry", "Повторить применение сохранённых настроек браузером.")];
+const PRIVATE_ACTION_HELP = ["#homeProxyWarningBanner[role=\"button\"],#toast[role=\"button\"]", () => t("settings_help_private", "Открыть настройки разрешения работы в приватных окнах Firefox.")];
+
 // Explicit descriptions only: never derive help from values, endpoints or credentials.
 const HELP = [
   ["[data-tab=\"pac\"]", () => t("settings_help_nav_pac", "Выбрать источник правил и обновить PAC.")],
@@ -8,7 +12,7 @@ const HELP = [
   ["[data-tab=\"mods\"]", () => t("settings_help_nav_mods", "Изменить ограничения маршрутизации PAC.")],
   ["[data-tab=\"logs\"]", () => t("settings_help_nav_logs", "Просмотреть ошибки сети, PAC и прокси.")],
   ["[data-tab=\"history\"],#openHistoryBtn", () => t("settings_help_nav_history", "Просмотреть изменения правил и отменить доступные операции.")],
-  ["[data-tab=\"tools\"]", () => t("settings_help_nav_tools", "Открыть диагностику, код PAC и сброс настроек.")],
+  ["[data-tab=\"tools\"]", () => t("settings_help_nav_tools", "Перенести настройки, проверить подключение, открыть код PAC или выполнить сброс.")],
   ["[data-tab=\"notifications\"]", () => t("settings_help_nav_notifications", "Выбрать уведомления об ошибках и потере контроля.")],
   ["[data-tab=\"appearance\"]", () => t("settings_help_nav_appearance", "Настроить тему и акцентный цвет интерфейса.")],
   ["[data-provider=\"Антизапрет\"],[data-provider=\"Антизапрет\"] input", () => t("settings_help_provider_az", "Использовать правила Антизапрета для обхода блокировок.")],
@@ -20,7 +24,7 @@ const HELP = [
   ["#saveCustomPacUrlBtn", () => t("settings_help_pac_apply", "Сохранить ссылку и применить выбранный PAC.")],
   ["#syncBtn", () => t("settings_help_pac_update", "Заново загрузить правила выбранного PAC-провайдера.")],
   ["#clearHistoryBtn", () => t("settings_help_history_clear", "Удалить записи истории без изменения текущих правил.")],
-  [".history-row button", () => t("settings_help_history_undo", "Отменить это изменение, сохранив последующие ручные правки.")],
+  HISTORY_UNDO_HELP,
   ["#importFileBtn", () => t("settings_help_import", "Добавить домены из .txt в текущий список.")],
   ["#domainListsBack", () => t("settings_help_dl_back", "Вернуться к листам, сохранив изменения редактора.")],
   ["#manualRulesLink", () => t("settings_help_dl_manual", "Открыть ручные правила, которые имеют приоритет над листами.")],
@@ -58,10 +62,12 @@ const HELP = [
   ["#selectAllFiltered", () => t("settings_help_site_select_all", "Выбрать или снять выбор всех найденных сайтов, включая ещё не показанные.")],
   ["#bulkProxy", () => t("settings_help_site_bulk_target", "Выбрать новый прокси для отмеченных сайтов.")],
   ["#bulkAssign", () => t("settings_help_site_bulk", "Назначить выбранный прокси всем отмеченным сайтам.")],
+  ["#bulkWildcardBtn,[id$=bulkWildcardBtn]", () => t("settings_help_site_wildcard_bulk", "Добавить или убрать префикс *. у выбранных доменов.")],
   ["#clearSelection", () => t("settings_help_site_deselect", "Снять отметки со всех выбранных сайтов.")],
   [".domain-select", () => t("settings_help_site_select", "Включить сайт в выбор для массового переноса.")],
   [".domain-proxy-select", () => t("settings_help_site_assign", "Изменить прокси, назначенный только этому сайту.")],
   [".delete-domain-btn", () => t("settings_help_site_delete", "Удалить правило сайта из текущего списка.")],
+  ["#rawWildcardBtn,[id$=rawWildcardBtn]", () => t("settings_help_site_wildcard_raw", "Добавить или убрать префикс *. у домена в текущей строке или выделении.")],
   ["#rawTextEditor", () => t("settings_help_site_raw", "Редактировать три списка; изменения сохраняются автоматически.")],
   ["#rawRetrySave", () => t("settings_help_site_raw_retry", "Обновить ревизию правил и повторить сохранение вашего текста.")],
   ["[data-list-scope] [id$=importFileBtn]", () => t("settings_help_dl_replace", "Заменить домены только этого листа из .txt после просмотра и подтверждения.")],
@@ -69,20 +75,23 @@ const HELP = [
   ["[data-list-scope] .domain-select", () => t("settings_help_dl_select", "Отметить домен для удаления из этого листа.")],
   ["#proxyEditorModeToggle", () => t("settings_help_proxy_mode", "Переключить редактор прокси между формой и текстом.")],
   ["#defaultProxySelect", () => t("settings_help_proxy_default", "Назначить прокси по умолчанию для новых сайтов.")],
-  ["#proxyName,.proxy-profile-editor input", () => t("settings_help_proxy_name", "Название прокси: до 32 символов, без изменения адреса. В закрытых селекторах popup показано до 6 символов; полное имя — в списке и подсказке.")],
-  ["#proxyProtocol", () => t("settings_help_proxy_protocol", "Выбрать протокол соединения с прокси-сервером.")],
-  ["#proxyHost", () => t("settings_help_proxy_host", "Введите имя хоста или IP-адрес прокси-сервера.")],
-  ["#proxyPort", () => t("settings_help_proxy_port", "Введите порт, на котором прокси принимает соединения.")],
-  ["#proxyAuthCheck", () => t("settings_help_proxy_auth", "Включить ввод логина и пароля для HTTP/HTTPS-прокси.")],
-  ["#proxyUser", () => t("settings_help_proxy_user", "Введите имя пользователя для авторизации на прокси.")],
-  ["#proxyPass", () => t("settings_help_proxy_pass", "Введите пароль для авторизации на прокси.")],
+  ["#proxyFailoverSelect", () => t("proxyFailoverHint", "Меняется маршрут только запросов отказавшего прокси. Остальные правила сохраняются. Если резервный прокси тоже недоступен, соединение блокируется.")],
+  ["#portable-export,#portable-import", () => t("portable_settings_warning", "JSON содержит пароли прокси открытым текстом. Не передавайте его другим людям.")],
+  ["#proxyName,.proxy-connection-editor [name=name]", () => t("settings_help_proxy_name", "Название прокси: до 32 символов, без изменения адреса. В закрытых селекторах popup показано до 6 символов; полное имя — в списке и подсказке.")],
+  ["#proxyProtocol,.proxy-connection-editor [name=protocol]", () => t("settings_help_proxy_protocol", "Выбрать протокол соединения с прокси-сервером.")],
+  ["#proxyHost,.proxy-connection-editor [name=host]", () => t("settings_help_proxy_host", "Введите имя хоста или IP-адрес прокси-сервера.")],
+  ["#proxyPort,.proxy-connection-editor [name=port]", () => t("settings_help_proxy_port", "Введите порт, на котором прокси принимает соединения.")],
+  ["#proxyAuthCheck,.proxy-connection-editor [name=hasAuth]", () => t("settings_help_proxy_auth", "Включить ввод логина и пароля для HTTP/HTTPS-прокси.")],
+  ["#proxyUser,.proxy-connection-editor [name=username]", () => t("settings_help_proxy_user", "Введите имя пользователя для авторизации на прокси.")],
+  ["#proxyPass,.proxy-connection-editor [name=password]", () => t("settings_help_proxy_pass", "Введите пароль для авторизации на прокси.")],
   ["#addProxyBtn", () => t("settings_help_proxy_add", "Проверить доступность и сохранить новый прокси.")],
   ["#recheckAllProxiesBtn", () => t("settings_help_proxy_check_all", "Повторно проверить доступность настроенных прокси.")],
   [".recheck-btn", () => t("settings_help_proxy_check", "Повторно проверить доступность этого прокси.")],
-  [".rename-proxy-btn", () => t("settings_help_proxy_rename", "Открыть редактор названия этого прокси.")],
+  [".edit-proxy-btn", () => t("settings_help_proxy_edit", "Открыть редактор подключения, сохранив назначения прокси.")],
   [".proxy-actions .delete-btn", () => t("settings_help_proxy_delete", "Выбрать замену и подготовить удаление этого прокси.")],
-  [".proxy-profile-editor select", () => t("settings_help_proxy_replace", "Выбрать прокси, на который будут перенесены зависимые сайты.")],
-  [".proxy-profile-editor button:first-of-type", () => t("settings_help_proxy_submit", "Применить переименование или удаление с выбранной заменой.")],
+  [".proxy-profile-editor:not(.proxy-connection-editor) select", () => t("settings_help_proxy_replace", "Выбрать прокси, на который будут перенесены зависимые сайты.")],
+  [".proxy-profile-editor:not(.proxy-connection-editor) button:first-of-type", () => t("settings_help_proxy_submit", "Применить переименование или удаление с выбранной заменой.")],
+  [".proxy-connection-editor button[type=submit]", () => t("settings_help_proxy_connection_save", "Сохранить изменения подключения прокси.")],
   [".proxy-profile-editor button:last-of-type", () => t("settings_help_proxy_cancel", "Закрыть редактор без сохранения изменений прокси.")],
   ["#customProxyText", () => t("settings_help_proxy_raw", "Редактировать список прокси; сохранение — кнопкой «Применить».")],
   ["#saveProxiesBtn", () => t("settings_help_proxy_save", "Сохранить изменения текстового списка прокси.")],
@@ -93,7 +102,7 @@ const HELP = [
   ["#httpsOnlyToggle", () => t("settings_help_https", "Не направлять HTTP-сайты через прокси.")],
   ["#secureProxiesOnlyToggle", () => t("settings_help_secure", "Ограничить цепочку прокси защищёнными транспортами.")],
   ["#prohibitDnsToggle", () => t("settings_help_dns", "Запретить DNS-запросы из PAC-скрипта.")],
-  ["#proxyOrDieToggle", () => t("settings_help_fail_closed", "Не переходить на прямое соединение при сбое прокси.")],
+  ["#proxyOrDieToggle", () => t("settings_help_fail_closed", "Блокирует прямое соединение при сбое прокси из PAC-скрипта или ошибке самого PAC. Поведение своих прокси настраивается отдельно во вкладке «Прокси».")],
   ["#moreDomainsToggle", () => t("settings_help_special", "Направлять особые доменные зоны через прокси.")],
   ["#notifPacErrorToggle", () => t("settings_help_notify_pac", "Показывать уведомления об ошибках PAC.")],
   ["#notifExtErrorToggle", () => t("settings_help_notify_ext", "Показывать уведомления об ошибках расширения.")],
@@ -104,14 +113,16 @@ const HELP = [
   ["[data-category=\"pac\"]", () => t("settings_help_logs_pac", "Показать только события PAC-скрипта.")],
   ["[data-category=\"auth\"]", () => t("settings_help_logs_auth", "Показать только события авторизации.")],
   ["[data-category=\"system\"]", () => t("settings_help_logs_system", "Показать только системные события.")],
+  ["[data-category=\"rules\"]", () => t("settings_help_logs_rules", "Показать только события правил маршрутизации.")],
+  ["[data-category=\"settings\"]", () => t("settings_help_logs_settings", "Показать только события настроек.")],
+  ["[data-category=\"backup\"]", () => t("settings_help_logs_backup", "Показать только события резервного копирования.")],
+  ["#logsLevelSelect", () => t("settings_help_logs_level", "Отфильтровать записи журнала по уровню важности.")],
   ["#logsSearchInput", () => t("settings_help_logs_search", "Найти записи журнала по тексту ошибки, домену или URL.")],
   ["#clearLogsSearchBtn", () => t("settings_help_logs_search_clear", "Убрать поисковый запрос и снова показать записи категории.")],
   ["#refreshLogsBtn", () => t("settings_help_logs_refresh", "Заново прочитать записи журнала.")],
-  ["#copyLogsBtn", () => t("settings_help_logs_copy", "Скопировать журнал в буфер обмена.")],
-  ["#exportLogsBtn", () => t("settings_help_logs_export", "Скачать журнал в текстовый файл.")],
+  ["#copyLogsBtn", () => t("settings_help_logs_copy_filtered", "Скопировать все записи по выбранным фильтрам в буфер обмена.")],
+  ["#exportLogsBtn", () => t("settings_help_logs_export_filtered", "Скачать все записи по выбранным фильтрам в текстовый файл.")],
   ["#clearLogsBtn", () => t("settings_help_logs_clear", "Удалить сохранённые записи журнала после подтверждения.")],
-  [".log-copy-btn", () => t("settings_help_log_copy", "Скопировать текст и подробности этой записи журнала.")],
-  [".log-card:has(.log-details-block)", () => t("settings_help_log_expand", "Показать или скрыть подробности этой записи.")],
   ["#testConnBtn", () => t("settings_help_test", "Проверить связь с PAC-сервером и показать задержку.")],
 
   ["#viewPacScriptBtn", () => t("settings_help_source", "Открыть код установленного PAC или предпросмотр настроек.")],
@@ -122,40 +133,55 @@ const HELP = [
   ["#appearanceColor", () => t("settings_help_color", "Выбрать свой акцентный цвет в палитре.")],
   ["#appearanceHex", () => t("settings_help_hex", "Задать свой акцентный цвет кодом #RGB или #RRGGBB.")],
   [".appearance-retry", () => t("settings_help_appearance_retry", "Повторить сохранение выбранного оформления в браузере.")],
-  ["#applicationBanner button", () => t("settings_help_apply_retry", "Повторить применение сохранённых настроек браузером.")],
-  ["#homeProxyWarningBanner[role=\"button\"],#toast[role=\"button\"]", () => t("settings_help_private", "Открыть настройки разрешения работы в приватных окнах Firefox.")],
+  APPLICATION_RETRY_HELP,
+  PRIVATE_ACTION_HELP,
 ];
 
-export function refreshSettingsHelp(root = document) {
-  for (const [selector, describe] of HELP) {
-    const prefix = root.dataset?.idPrefix;
-    const scopedSelector = prefix ? selector.replace(/#([\w-]+)/g, (_match, id) => `#${prefix}${id}`) : selector;
-    const nodes = [...root.querySelectorAll(scopedSelector)];
-    if (root.matches?.(scopedSelector)) nodes.unshift(root);
-    if (!nodes.length) continue;
-    const text = describe();
-    for (const node of nodes) {
-      node.title = text;
-      node.setAttribute('aria-description', text);
-      // Preserve existing names/validation references; supply missing icon/switch names.
-      const hasLabel = [...(node.labels || [])].some(label => label.textContent.trim());
-      if (!node.hasAttribute('aria-label') && !hasLabel &&
-          (!node.textContent.trim() || node.matches('.icon-btn,.delete-domain-btn,#closePacModalBtn,#clearLogsSearchBtn'))) {
-        node.setAttribute('aria-label', text);
-      }
-      if (node.matches('input[type=checkbox]') && node.closest('label')) {
-        node.closest('label').title = text;
-      }
-    }
+export function setSettingsHelpText(node, text) {
+  node.title = text;
+  node.setAttribute('aria-description', text);
+}
+
+function applyHelp(node, text) {
+  setSettingsHelpText(node, text);
+  // Preserve existing names/validation references; supply missing icon/switch names.
+  const hasLabel = [...(node.labels || [])].some(label => label.textContent.trim());
+  if (!node.hasAttribute('aria-label') && !hasLabel &&
+      (!node.textContent.trim() || node.matches('.icon-btn,.delete-domain-btn,#closePacModalBtn,#clearLogsSearchBtn'))) {
+    node.setAttribute('aria-label', text);
   }
+  if (node.matches('input[type=checkbox]')) {
+    const label = node.closest('label');
+    if (label) label.title = text;
+  }
+}
+
+function refreshHelpRule(root, [selector, describe], prefix) {
+  const scopedSelector = prefix ? selector.replace(/#([\w-]+)/g, (_match, id) => `#${prefix}${id}`) : selector;
+  const nodes = root.querySelectorAll(scopedSelector);
+  const rootMatches = root.matches?.(scopedSelector);
+  if (!rootMatches && !nodes.length) return;
+  const text = describe();
+  if (rootMatches) applyHelp(root, text);
+  for (const node of nodes) applyHelp(node, text);
+}
+
+export function refreshSettingsHelp(root = document) {
+  const prefix = root.dataset?.idPrefix;
+  // The actionable-error caller updates just the alert itself, not its contents.
+  if (!prefix && (root.id === 'toast' || root.id === 'homeProxyWarningBanner')) {
+    const [selector, describe] = PRIVATE_ACTION_HELP;
+    if (root.matches(selector)) applyHelp(root, describe());
+    return;
+  }
+  for (const rule of HELP) refreshHelpRule(root, rule, prefix);
 }
 
 export function initSettingsHelp() {
   refreshSettingsHelp();
-  // Shared history recursively renders its own undo buttons; observe only that small list.
-  // No body observer and no per-row listeners. Attribute updates cannot retrigger this.
-  for (const id of ['historyList', 'applicationBanner']) {
+  // Shared renderers own these subtrees. Observe child changes and apply only their rule.
+  for (const [id, rule] of [['historyList', HISTORY_UNDO_HELP], ['applicationBanner', APPLICATION_RETRY_HELP]]) {
     const root = document.getElementById(id);
-    if (root) new MutationObserver(() => refreshSettingsHelp(root)).observe(root, { childList: true, subtree: true });
+    if (root) new MutationObserver(() => refreshHelpRule(root, rule)).observe(root, { childList: true, subtree: true });
   }
 }

@@ -47,20 +47,23 @@ export function compileConfiguredRules(mods) {
 
 // Self-contained so the exact same matcher can be embedded in a PAC VM.
 export function matchCompiledRules(host, tables) {
-  host = (host || '').toLowerCase().trim();
-  const parts = host.split('.');
-  function lookup(map, ordered, searchParts = parts) {
+  host = (host || '').toLowerCase().trim().replace(/\.+$/, '');
+  function lookup(map, ordered, searchHost = host) {
     let winner;
-    for (let i = 0; i < searchParts.length; i++) {
-      const suffix = searchParts.slice(i).join('.');
-      const candidates = i === 0 ? [map.exact[suffix], map.wild[suffix]] : [map.wild[suffix], map.exact[suffix]];
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        if (!ordered) return candidate;
-        if (!winner || candidate.priority < winner.priority) winner = candidate;
-      }
+    let start = 0;
+    for (;;) {
+      const suffix = start === 0 ? searchHost : searchHost.slice(start);
+      // Exact wins at the full host; wildcard wins at ancestor suffixes.
+      const first = (start === 0 ? map.exact : map.wild)[suffix];
+      if (!ordered && first) return first;
+      const second = (start === 0 ? map.wild : map.exact)[suffix];
+      if (!ordered && second) return second;
+      if (first && (!winner || first.priority < winner.priority)) winner = first;
+      if (second && (!winner || second.priority < winner.priority)) winner = second;
+      const dot = searchHost.indexOf('.', start);
+      if (dot < 0) return winner;
+      start = dot + 1;
     }
-    return winner;
   }
   const all = lookup(tables.all);
   if (!tables.layered) return all ? { ...all, isExact: all.ruleKey === host || all.ruleKey === `*.${host}` } : { matched: false };
@@ -73,8 +76,8 @@ export function matchCompiledRules(host, tables) {
   const independentList = list && parentListKey !== all?.automaticSite && parentListKey !== all?.inheritedMainHost;
   let inherited;
   if (all?.automaticSite && all.isProxied === true && (!manual || parentIntent) && !independentList) {
-    const parentParts = (all.inheritedMainHost || all.automaticSite).split('.');
-    inherited = lookup(tables.manual, false, parentParts) || lookup(tables.lists, true, parentParts) ||
+    const parentHost = all.inheritedMainHost || all.automaticSite;
+    inherited = lookup(tables.manual, false, parentHost) || lookup(tables.lists, true, parentHost) ||
       (all.inheritedListId ? { matched: false } : undefined);
   }
   const winner = manual && !parentIntent ? manual :
@@ -87,8 +90,9 @@ export function matchCompiledRules(host, tables) {
 
 export function matchConfiguredRule(host, mods) {
   if (mods.ifNoMods || mods.ifMindExceptions === false) return { matched: false };
-  const tables = compileConfiguredRules(mods);
-  if (!tables.layered) {
+  const mayBeLayered = mods.ruleMeta || mods.domainLists?.length || mods.pacBypassDomains?.length;
+  const tables = mayBeLayered ? compileConfiguredRules(mods) : null;
+  if (!tables?.layered) {
     const match = matchExceptionDomain(host, mods.exceptions);
     const proxyId = match.isProxied ? mods.domainProxyIds?.[match.ruleKey] : undefined;
     return proxyId === undefined ? match : { ...match, proxyId };

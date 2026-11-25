@@ -29,27 +29,48 @@ const DEFAULT_PROXY_IPS = {
 };
 
 class IpToHostManager {
+  #addresses = new Map(Object.entries(DEFAULT_PROXY_IPS));
+
   constructor() {
-    this.ipToHostMap = Object.assign({}, DEFAULT_PROXY_IPS);
     this.initialized = false;
   }
 
   async init() {
     const saved = await storage.get(IP_STORAGE_KEY, null);
-    if (saved && typeof saved === 'object') {
-      Object.assign(this.ipToHostMap, saved);
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      for (const [ip, host] of Object.entries(saved)) {
+        if (typeof host === 'string' && host.trim()) this.#remember(ip, host.trim());
+      }
     }
     this.initialized = true;
   }
 
   get(ip) {
-    if (!ip) return null;
-    return this.ipToHostMap[ip] || null;
+    return this.#addresses.get(ip) ?? null;
   }
 
   isProxyIp(ip) {
-    if (!ip) return false;
-    return Boolean(this.ipToHostMap[ip]);
+    return this.#addresses.has(ip);
+  }
+
+  #remember(ip, host) {
+    if (typeof ip !== 'string') return;
+    const key = ip.trim();
+    if (!key || Object.hasOwn(Object.prototype, key)) return;
+    if (this.#addresses.has(key)) {
+      this.#addresses.set(key, host);
+      return;
+    }
+    if (this.#addresses.size >= MAX_IP_MAP_SIZE) {
+      // Built-ins are seeded first and never evicted. Drop one dynamic entry.
+      for (const oldest of this.#addresses.keys()) {
+        if (!Object.hasOwn(DEFAULT_PROXY_IPS, oldest)) {
+          this.#addresses.delete(oldest);
+          break;
+        }
+      }
+    }
+    this.#addresses.set(key, host);
   }
 
   addHost(host, ips = []) {
@@ -57,19 +78,18 @@ class IpToHostManager {
     const cleanHost = String(host).trim();
     if (!cleanHost) return;
 
-    if (Object.keys(this.ipToHostMap).length > MAX_IP_MAP_SIZE) {
-      this.ipToHostMap = Object.assign({}, DEFAULT_PROXY_IPS);
-    }
-
     // Safe IP extraction: handles bare IPs, host:port, [ipv6]:port and bare [ipv6]
     let bareIp = cleanHost;
     if (cleanHost.startsWith('[')) {
-      bareIp = cleanHost.replace(/^\[([^]]+)](?::\d+)?$/, '$1');
-    } else if ((cleanHost.match(/:/g) || []).length === 1) {
-      bareIp = cleanHost.split(':')[0];
+      bareIp = /^\[([^\]]+)](?::\d+)?$/.exec(cleanHost)?.[1] ?? cleanHost;
+    } else {
+      const colon = cleanHost.indexOf(':');
+      if (colon !== -1 && cleanHost.indexOf(':', colon + 1) === -1) {
+        bareIp = cleanHost.slice(0, colon);
+      }
     }
 
-    const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(bareIp) &&
+    const isIPv4 = !cleanHost.startsWith('[') && /^(\d{1,3}\.){3}\d{1,3}$/.test(bareIp) &&
       bareIp.split('.').every((octet) => Number(octet) <= 255);
     let isIPv6 = false;
     if (bareIp.includes(':')) {
@@ -78,35 +98,30 @@ class IpToHostManager {
       } catch { /* not a valid IPv6 literal */ }
     }
     if (isIPv4 || isIPv6) {
-      this.ipToHostMap[bareIp] = cleanHost;
+      this.#remember(bareIp, cleanHost);
     }
 
     if (Array.isArray(ips)) {
-      for (const ip of ips) {
-        if (ip && typeof ip === 'string') {
-          this.ipToHostMap[ip.trim()] = cleanHost;
-        }
-      }
+      for (const ip of ips) this.#remember(ip, cleanHost);
     }
   }
 
   updateFromPac(pacData) {
     if (!pacData || typeof pacData !== 'string') return;
-    const matches = pacData.matchAll(/(?:HTTPS|PROXY|SOCKS5?)\s+([^\s;'"`]+)/gi);
-    for (const match of matches) {
-      if (match[1] && match[1] !== 'DIRECT') {
-        this.addHost(match[1]);
-      }
+    const directive = /(?:HTTPS|PROXY|SOCKS5?)\s+([^\s;'"`]+)/gi;
+    let match;
+    while ((match = directive.exec(pacData)) !== null) {
+      if (match[1] !== 'DIRECT') this.addHost(match[1]);
     }
   }
 
   reset() {
-    this.ipToHostMap = Object.assign({}, DEFAULT_PROXY_IPS);
+    this.#addresses = new Map(Object.entries(DEFAULT_PROXY_IPS));
     this.initialized = false;
   }
 
   async persistData() {
-    await storage.set(IP_STORAGE_KEY, this.ipToHostMap);
+    await storage.set(IP_STORAGE_KEY, Object.fromEntries(this.#addresses));
   }
 
 }

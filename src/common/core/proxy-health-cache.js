@@ -8,8 +8,7 @@ export const PROXY_HEALTH_CACHE_KEY = 'proxy-health-cache';
 const MAX_CACHE_ENTRIES = 100;
 const MAX_ERROR_LENGTH = 500;
 let cacheQueue = Promise.resolve();
-
-export function drainProxyHealthCache() { return cacheQueue; }
+const authenticatedResults = new Map();
 
 function enqueueCacheOperation(operation) {
   const task = cacheQueue.then(operation, operation);
@@ -50,6 +49,13 @@ function normalizeProxyList(proxyList) {
   return unique;
 }
 
+function withoutCredentialKeys(stored) {
+  return Object.fromEntries(Object.entries(stored || {}).filter(([key]) => {
+    const proxy = parseProxyScheme(key);
+    return proxy && !proxy.hasAuth;
+  }));
+}
+
 /**
  * Read results without discarding checks performed before a proxy is saved.
  * Only explicit list edits may prune orphaned entries.
@@ -58,15 +64,22 @@ function readHealthCache(proxyList, prune) {
   return enqueueCacheOperation(async () => {
     const allowed = normalizeProxyList(typeof proxyList === 'function' ? await proxyList() : proxyList);
     const stored = await storage.get(PROXY_HEALTH_CACHE_KEY, {});
+    const safe = withoutCredentialKeys(stored);
     const filtered = {};
+    const durable = {};
 
     for (const proxyRaw of allowed) {
-      const entry = normalizeHealthEntry(stored && stored[proxyRaw]);
+      const entry = normalizeHealthEntry(authenticatedResults.get(proxyRaw) || safe[proxyRaw]);
       if (entry) filtered[proxyRaw] = entry;
+      if (safe[proxyRaw] && entry) durable[proxyRaw] = entry;
     }
 
-    if (prune && JSON.stringify(stored || {}) !== JSON.stringify(filtered)) {
-      await storage.set(PROXY_HEALTH_CACHE_KEY, filtered);
+    if (prune) {
+      for (const key of authenticatedResults.keys()) if (!allowed.has(key)) authenticatedResults.delete(key);
+    }
+    const next = prune ? durable : safe;
+    if (JSON.stringify(stored || {}) !== JSON.stringify(next)) {
+      await storage.set(PROXY_HEALTH_CACHE_KEY, next);
     }
     return filtered;
   });
@@ -84,7 +97,16 @@ export function saveProxyHealthResult(proxyRaw, result, checkedAt = Date.now()) 
     if (!parsed || !entry) return null;
 
     const stored = await storage.get(PROXY_HEALTH_CACHE_KEY, {});
-    const entries = Object.entries(Object.assign({}, stored, { [parsed.raw]: entry }))
+    const safe = withoutCredentialKeys(stored);
+    if (parsed.hasAuth) {
+      // Never persist a second copy of the password or a password-derived key.
+      authenticatedResults.delete(parsed.raw);
+      authenticatedResults.set(parsed.raw, entry);
+      if (authenticatedResults.size > MAX_CACHE_ENTRIES) authenticatedResults.delete(authenticatedResults.keys().next().value);
+    } else {
+      safe[parsed.raw] = entry;
+    }
+    const entries = Object.entries(safe)
       .map(([proxy, health]) => [proxy, normalizeHealthEntry(health)])
       .filter(([, health]) => health)
       .sort((a, b) => b[1].checkedAt - a[1].checkedAt)
@@ -98,4 +120,8 @@ export function saveProxyHealthResult(proxyRaw, result, checkedAt = Date.now()) 
 /** Keeps cache entries only for the supplied proxy list. */
 export function pruneProxyHealthCache(proxyList = []) {
   return readHealthCache(proxyList, true);
+}
+
+export function clearProxyHealthCache() {
+  return pruneProxyHealthCache([]);
 }

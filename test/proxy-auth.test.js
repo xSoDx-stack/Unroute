@@ -185,7 +185,7 @@ describe('Proxy Authentication: Separate Temporary & Persistent Credentials', ()
     expect(creds.username).to.equal('storedUser');
   });
 
-  it('should not expose proxy endpoints in authentication logs', () => {
+  it('should not expose proxy endpoints in authentication logs', async () => {
     const sensitiveHost = 'sensitive.proxy.internal';
     const originalWebRequest = chrome.webRequest;
     const originalIsInitialized = appState.isInitialized;
@@ -212,13 +212,14 @@ describe('Proxy Authentication: Separate Temporary & Persistent Credentials', ()
     registerTemporaryCredentials(sensitiveHost, 8443, 'user', 'password');
 
     try {
-      setupAuthListener();
+      setupAuthListener(null, async () => { captured.info.push('logger ready'); });
       const details = {
         isProxy: true,
         challenger: { host: sensitiveHost, port: 8443 },
         requestId: 'sensitive-request',
       };
 
+      expect(authListener({ isProxy: true, requestId: 'missing-challenger' })).to.deep.equal({});
       authListener(details);
       authListener(details);
       authListener(details);
@@ -232,6 +233,8 @@ describe('Proxy Authentication: Separate Temporary & Persistent Credentials', ()
       expect(captured.log).to.include('[Proxy Auth] Authenticating proxy');
       expect(captured.warn).to.include('[Proxy Auth] Max attempts (3) exceeded');
       expect(captured.warn).to.include('[Proxy Auth] No credentials found');
+      await new Promise(resolve => setImmediate(resolve));
+      expect(captured.info[0]).to.equal('logger ready');
       expect(captured.info).to.include('auth Аутентификация прокси Отправка учётных данных');
 
       const allLogs = [...captured.log, ...captured.warn, ...captured.info].join('\n');

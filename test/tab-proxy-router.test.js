@@ -30,6 +30,16 @@ describe('Firefox own-proxy tab routing', () => {
   });
   const req = (tabId, url, type = 'image') => ({ tabId, url, type });
 
+  it('never appends a DIRECT fallback to an unassigned tab route unless ownProxyOrDie is explicitly disabled', async () => {
+    mods.ifProxyOrDie = true;
+    const chain = await router.handle(req(1, 'https://proxy.test/', 'main_frame'));
+    expect(chain).to.deep.equal([{ type: 'http', host: 'localhost', port: 8080 }, null]);
+    mods.ifProxyOrDie = false;
+    expect(await router.handle(req(1, 'https://cdn.test/'))).to.deep.equal([chain[0], null]);
+    mods.ownProxyOrDie = false;
+    expect(await router.handle(req(1, 'https://cdn.test/'))).to.deep.equal([chain[0], { type: 'direct' }, null]);
+  });
+
   it('routes the same CDN differently in two tabs without modifying rules', async () => {
     const saved = JSON.stringify(mods);
     await router.handle(req(1, 'https://proxy.test/', 'main_frame'));
@@ -41,6 +51,36 @@ describe('Firefox own-proxy tab routing', () => {
     expect(reads).to.equal(1);
     expect(JSON.stringify(mods)).to.equal(saved);
   });
+  it('replaces implicit DIRECT on unassigned routes and refreshes the chain when it changes', async () => {
+    mods.ownProxyOrDie = false;
+    mods.fallbackProxyChain = 'HTTPS reserve.test:443';
+    mods.replaceDirectWith = 'HTTPS replace.test:443; DIRECT';
+    const route = () => router.handle(req(1, 'https://proxy.test/', 'main_frame'));
+    const prefix = [{ type: 'http', host: 'localhost', port: 8080 }, { type: 'https', host: 'reserve.test', port: 443 }];
+    expect(await route()).to.deep.equal([...prefix, { type: 'https', host: 'replace.test', port: 443 }, { type: 'direct' }, null]);
+    mods.replaceDirectWith = 'HTTPS next.test:443';
+    expect(await route()).to.deep.equal([...prefix, { type: 'https', host: 'next.test', port: 443 }, null]);
+    mods.ownProxyOrDie = true;
+    expect(await route()).to.deep.equal([...prefix, null]);
+    expect(await router.handle(req(1, 'https://direct.test/', 'main_frame'))).to.equal(null);
+  });
+
+  it('fails closed only for eligible strict unassigned routes when settings are unavailable', async () => {
+    proxyBackend.getSettings = async () => { throw new Error('Settings unavailable'); };
+    mods.ownProxyOrDie = true;
+    const route = url => router.handle(req(1, url, 'main_frame'));
+    expect(await route('https://proxy.test/')).to.deep.equal([{ type: 'http', host: '127.0.0.1', port: 9 }]);
+    mods.ifProxyHttpsUrlsOnly = true;
+    expect(await route('http://proxy.test/')).to.equal(undefined);
+    expect(await route('https://direct.test/')).to.equal(undefined);
+    mods.ownProxyOrDie = false;
+    expect(await route('https://proxy.test/')).to.equal(undefined);
+    proxyBackend.getSettings = async () => settings;
+    expect(await route('https://proxy.test/')).to.deep.equal([
+      { type: 'http', host: 'localhost', port: 8080 }, { type: 'direct' }, null,
+    ]);
+  });
+
   it('does not override standard PAC, disabled mods, or another extension', async () => {
     await router.handle(req(1, 'https://proxy.test/', 'main_frame'));
     mods.filteredCustomsString = '';

@@ -4,14 +4,14 @@
 // Keep it free of module/global dependencies so both backends use one contract.
 export function routeConstraint(url, host, policy, whitelist) {
   if (policy.whitelistEnabled) {
-    const labels = host.split('.');
+    const labels = host.toLowerCase().trim().replace(/\.+$/, '').split('.');
     let allowed = false;
     for (let index = 0; index < labels.length; index++) {
       if (whitelist[labels.slice(index).join('.')] === true) { allowed = true; break; }
     }
     if (!allowed) return 'whitelist';
   }
-  if (policy.httpsOnly && !url.startsWith('https:')) return 'https-only';
+  if (policy.httpsOnly && url.slice(0, 6).toLowerCase() !== 'https:') return 'https-only';
   return '';
 }
 

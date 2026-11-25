@@ -5,11 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { createFailoverFixtures, saveFailoverEvidence } from './proxy-failover-scenario.js';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const scratch = process.env.TMPDIR || os.tmpdir();
 const temp = await fs.mkdtemp(path.join(scratch, 'unroute-firefox-tabs-'));
 const extension = path.join(temp, 'extension');
+const failoverOnly = process.env.UNROUTE_PROXY_FAILOVER_ONLY === '1';
+const failoverFixture = failoverOnly ? await createFailoverFixtures() : null;
 const privateDenied = process.env.UNROUTE_TEST_PRIVATE_DENIED === '1';
 let browser;
 let finish;
@@ -33,7 +36,7 @@ const control = http.createServer(async (req, res) => {
     await fs.mkdir(output, { recursive: true });
     await fs.writeFile(path.join(output, `firefox-domain-lists-${data.locale}.json`), JSON.stringify({ ...data, received: received.filter(item => item.url.includes('/domain-lists-')) }, null, 2));
   }
-  if (data.uiDone) { finishUi(data); return; }
+  if (data.uiDone) { finishUi(data); if (data.done || data.error) finish(data); return; }
   if (data.done || data.error) finish(data);
 });
 const origin = http.createServer((req, res) => {
@@ -74,10 +77,11 @@ try {
   const port = origin.address().port;
   const proxyPort = proxy.address().port;
   const helpers = await fs.readFile(new URL('./firefox-integration-helpers.js', import.meta.url), 'utf8');
-  const uiSource = helpers + '\n' + (await fs.readFile(new URL('./sites-editor-checks.js', import.meta.url), 'utf8')).replace('const send = message => new Promise(resolve => chrome.runtime.sendMessage(message, resolve));', 'const send = sendFirefoxFixtureMessage;') + '\n' + (await fs.readFile(new URL('./domain-lists-native-checks.js', import.meta.url), 'utf8')) + '\n' + (await fs.readFile(new URL('./limits-help-checks.js', import.meta.url), 'utf8')) + '\n' + (await fs.readFile(new URL('./firefox-ui-runner.js', import.meta.url), 'utf8'));
+  const failoverSource = await fs.readFile(new URL('./proxy-failover-checks.js', import.meta.url), 'utf8');
+  const uiSource = failoverSource + '\n' + helpers + '\n' + (await fs.readFile(new URL('./sites-editor-checks.js', import.meta.url), 'utf8')).replace('const send = message => new Promise(resolve => chrome.runtime.sendMessage(message, resolve));', 'const send = sendFirefoxFixtureMessage;') + '\n' + (await fs.readFile(new URL('./domain-lists-native-checks.js', import.meta.url), 'utf8')) + '\n' + (await fs.readFile(new URL('./limits-help-checks.js', import.meta.url), 'utf8')) + '\n' + (await fs.readFile(new URL('./firefox-ui-runner.js', import.meta.url), 'utf8'));
   for (const surface of ['options', 'popup', ...(privateDenied ? ['firefox-private-browsing'] : [])]) {
     const pagePath = path.join(extension, 'pages', surface);
-    await fs.writeFile(path.join(pagePath, 'ui-test.js'), `${uiSource}\nrunFirefoxUiChecks(${JSON.stringify(controlUrl)}, ${JSON.stringify(`HTTP 127.0.0.1:${proxyPort}`)}, ${JSON.stringify(process.env.UNROUTE_TEST_LOCALE || 'ru')}, ${JSON.stringify({port,proxyPort,secondProxyPort:secondProxy.address().port})});`);
+    await fs.writeFile(path.join(pagePath, 'ui-test.js'), `${uiSource}\nrunFirefoxUiChecks(${JSON.stringify(controlUrl)}, ${JSON.stringify(`HTTP 127.0.0.1:${proxyPort}`)}, ${JSON.stringify(process.env.UNROUTE_TEST_LOCALE || 'ru')}, ${JSON.stringify(failoverOnly ? {...failoverFixture.config, failoverOnly:true} : {port,proxyPort,secondProxyPort:secondProxy.address().port})});`);
     const html = await fs.readFile(path.join(pagePath, 'index.html'), 'utf8');
     await fs.writeFile(path.join(pagePath, 'index.html'), html.replace('</body>', '<script type="module" src="ui-test.js"></script></body>'));
   }
@@ -91,7 +95,10 @@ try {
       const {pacKitchen} = await import('./core/pac-kitchen.js');
       const {pacSync} = await import('./core/pac-sync.js');
       await appState.ensureInitialized();
-      if (${privateDenied}) {
+      if (${failoverOnly}) {
+        pacSync.currentPacProviderKey = 'onlyOwnSites';
+        await browser.tabs.create({url:browser.runtime.getURL('pages/options/index.html#proxies')});
+      } else if (${privateDenied}) {
         const {proxyBackend} = await import('./core/proxy-backend.js');
         let denial;
         try { await proxyBackend.applyPac('function FindProxyForURL(){return "DIRECT";}'); }
@@ -278,9 +285,13 @@ try {
   const outcome = await Promise.race([result, new Promise(resolve => {
     timeout = setTimeout(() => resolve({ error: 'Firefox harness timed out' }), 180000);
   })]);
+  if (failoverOnly && outcome.error) await saveFailoverEvidence('firefox', outcome.proofs || [], failoverFixture.received, await browser.version(), outcome.error);
   assert.equal(outcome.error, undefined, JSON.stringify(outcome));
   clearTimeout(timeout);
-  if (!privateDenied) {
+  if (failoverOnly) {
+    await saveFailoverEvidence('firefox', outcome.proofs || [], failoverFixture.received, await browser.version(), outcome.error);
+  }
+  if (!privateDenied && !failoverOnly) {
     const proof = received.filter(item => item.url.includes('/multiproxy-'));
     const expectedTargets = {
       'A-to-A': 'own-proxy', 'B-to-B': 'second-proxy',
@@ -307,6 +318,7 @@ try {
 } finally {
   clearTimeout(timeout);
   if (browser) await browser.close();
+  if (failoverFixture) await failoverFixture.close();
   await Promise.all([control, origin, proxy, secondProxy].map(server => {
     server.closeAllConnections();
     return new Promise(resolve => server.close(resolve));

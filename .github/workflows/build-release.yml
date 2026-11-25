@@ -6,9 +6,17 @@ on:
       - development
     tags:
       - 'v*'
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.github/AMO.md'
   pull_request:
     branches:
       - development
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.github/AMO.md'
   workflow_dispatch:
 
 permissions:
@@ -146,59 +154,9 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  sign-firefox:
-    name: Sign verified Firefox archive
-    needs: verify
-    if: needs.verify.outputs.publish == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    permissions:
-      actions: read
-      contents: read
-    env:
-      VERSION: ${{ needs.verify.outputs.version }}
-    steps:
-      - name: Checkout signing tools
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - name: Install locked signing dependencies
-        run: npm ci --no-audit --no-fund
-      - name: Download and sign the verified archive
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
-          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-        run: |
-          test -n "$WEB_EXT_API_KEY"
-          test -n "$WEB_EXT_API_SECRET"
-          gh run download "$GITHUB_RUN_ID" --name "unroute-v${VERSION}-firefox-mv3" --dir "$RUNNER_TEMP/verified"
-          unzip -q "$RUNNER_TEMP/verified/unroute-v${VERSION}-firefox-mv3.zip" -d "$RUNNER_TEMP/firefox-source"
-          node_modules/.bin/web-ext sign \
-            --source-dir "$RUNNER_TEMP/firefox-source" --artifacts-dir "$RUNNER_TEMP/signed" \
-            --channel unlisted --approval-timeout 900000 --no-input
-          signed_xpi=$(find "$RUNNER_TEMP/signed" -maxdepth 1 -type f -name '*.xpi' -print -quit)
-          test -n "$signed_xpi"
-          unzip -Z1 "$signed_xpi" | grep -Eq '^META-INF/(cose\.sig|mozilla\.rsa)$'
-          cp "$signed_xpi" "unroute-v${VERSION}-firefox-mv3.xpi"
-      - name: Upload signed Firefox artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unroute-v${{ env.VERSION }}-firefox-mv3-signed
-          path: unroute-v${{ env.VERSION }}-firefox-mv3.xpi
-          if-no-files-found: error
-          retention-days: 30
-
   release:
     name: Publish GitHub Release
-    needs: [verify, sign-firefox]
+    needs: verify
     if: needs.verify.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -224,6 +182,16 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
+      - name: Setup release preparation tools
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked release preparation dependencies
+        run: npm ci --no-audit --no-fund
+
       - name: Download the verified archive from this workflow run
         shell: bash
         env:
@@ -234,14 +202,17 @@ jobs:
             --name "unroute-v${VERSION}-chrome-mv3" \
             --dir "$RUNNER_TEMP/release-artifact"
           gh run download "$GITHUB_RUN_ID" \
-            --name "unroute-v${VERSION}-firefox-mv3-signed" \
+            --name "unroute-v${VERSION}-firefox-mv3" \
             --dir "$RUNNER_TEMP/release-artifact"
+          gh run download "$GITHUB_RUN_ID" --name store-submissions --dir "$RUNNER_TEMP/store-submissions"
+          source_archive=$(find "$RUNNER_TEMP/store-submissions" -type f -name "unroute-v${VERSION}-sources.zip" -print -quit)
+          test -n "$source_archive"
+          cp "$source_archive" "$RUNNER_TEMP/release-artifact/"
           chrome_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-chrome-mv3.zip"
-          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.xpi"
+          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.zip"
           test -f "$chrome_archive"
           test -f "$firefox_archive"
-          sha256sum "$chrome_archive" > "$chrome_archive.sha256"
-          sha256sum "$firefox_archive" > "$firefox_archive.sha256"
+          node .github/scripts/amo-release.mjs prepare "$RUNNER_TEMP/release-artifact"
 
       - name: Create GitHub Release
         shell: bash
@@ -250,7 +221,9 @@ jobs:
         run: |
           tag="${RELEASE_TAG}"
           chrome_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-chrome-mv3.zip"
-          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.xpi"
+          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.zip"
+          source_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-sources.zip"
+          request_file="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-amo-request.json"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite its assets." >&2
             exit 1
@@ -262,6 +235,30 @@ jobs:
           gh release create "$tag" \
             "$chrome_archive" "$chrome_archive.sha256" \
             "$firefox_archive" "$firefox_archive.sha256" \
+            "$source_archive" "$source_archive.sha256" "$request_file" \
             "${target_args[@]}" \
-            --notes-file ".github/release-notes/${tag}.md" \
+            --notes-file "$RUNNER_TEMP/release-artifact/release-notes.md" \
             --title "Unroute v${VERSION}"
+
+  amo-publish:
+    name: Submit Firefox to the public AMO catalog
+    needs: [verify, release]
+    if: needs.verify.outputs.publish == 'true' && vars.AMO_LISTED_ENABLED == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/amo-publish.yml
+    with:
+      version: ${{ needs.verify.outputs.version }}
+      submit: true
+    secrets: inherit
+
+  cws-publish:
+    name: Submit Chrome to the Chrome Web Store
+    needs: [verify, release]
+    if: needs.verify.outputs.publish == 'true' && vars.CWS_PUBLISH_ENABLED == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/cws-publish.yml
+    with:
+      version: ${{ needs.verify.outputs.version }}
+    secrets: inherit

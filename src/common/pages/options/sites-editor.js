@@ -2,10 +2,12 @@
 
 import { t, uiLocale } from '../../core/i18n.js';
 import { refreshSettingsHelp } from './settings-help.js';
-import { normalizeDomainRule, parseDomainRuleLines } from '../../core/domain-rules.js';
+import { normalizeDomainRule, parseDomainRuleLines, toggleWildcardDomain, toggleWildcardLines } from '../../core/domain-rules.js';
 import { sendMessage } from '../shared/client.js';
 import { ruleSourceLabel } from '../shared/rule-source.js';
-import { initDomainListsEditor, confirmListAction, readListFile, listPreviewText, parseListText } from './domain-lists-editor.js';
+import { createDomainCardIndex } from './domain-cards-list.js';
+import { initDomainListsEditor, confirmListAction } from './domain-lists-editor.js';
+import { readListFile, readManualDomainFile, listPreviewText, parseListText, domainListExportFilename } from './domain-file-io.js';
 
 export function initSitesEditor(root, options) {
   return initDomainListsEditor(root, options, initDomainEditor);
@@ -84,7 +86,70 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     rawRetrySave: root.querySelector('#rawRetrySave'),
     pacCount: root.querySelector('#pacCount'),
     bulkDelete: root.querySelector('#bulkDelete'),
+    bulkWildcardBtn: root.querySelector('#bulkWildcardBtn'),
+    rawWildcardBtn: root.querySelector('#rawWildcardBtn'),
   };
+
+  // Native textarea remains the only editable surface. The inert backdrop paints
+  // line backgrounds only; untrusted input is never interpreted as markup.
+  const rawFrame = document.createElement('div'); rawFrame.className = 'raw-editor-frame';
+  const rawBackdrop = document.createElement('div'); rawBackdrop.className = 'raw-highlight-backdrop';
+  rawBackdrop.setAttribute('aria-hidden', 'true');
+  const rawHighlights = document.createElement('pre'); rawHighlights.className = 'raw-highlight-content';
+  rawBackdrop.append(rawHighlights);
+  el.rawTextEditor.before(rawFrame); rawFrame.append(rawBackdrop, el.rawTextEditor);
+  el.rawTextEditor.wrap = 'off';
+  el.rawTextEditor.setAttribute('aria-invalid', 'false');
+  el.rawTextEditor.setAttribute('aria-describedby', el.editorStatusText.id);
+  el.editorStatusText.setAttribute('role', 'status');
+  el.editorStatusText.setAttribute('aria-live', 'polite');
+
+  let rawInvalidLines = new Set();
+
+  function syncRawScroll() {
+    const text = el.rawTextEditor;
+    const style = getComputedStyle(text);
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2 || 16;
+    const first = Math.max(1, Math.floor(text.scrollTop / lineHeight) - 1);
+    const last = Math.ceil((text.scrollTop + text.clientHeight) / lineHeight) + 2;
+    const fragment = document.createDocumentFragment();
+    // Only erroneous rows near the viewport have DOM nodes, even for 100k errors.
+    for (let number = first; number <= last; number++) {
+      if (!rawInvalidLines.has(number)) continue;
+      const line = document.createElement('span');
+      line.className = 'raw-line-error'; line.dataset.line = String(number);
+      line.style.top = `${parseFloat(style.paddingTop) + (number - 1) * lineHeight}px`;
+      line.style.height = `${lineHeight}px`;
+      fragment.append(line);
+    }
+    rawHighlights.replaceChildren(fragment);
+    rawHighlights.style.width = `${text.scrollWidth}px`;
+    rawHighlights.style.transform = `translate(${-text.scrollLeft}px, ${-text.scrollTop}px)`;
+  }
+
+  function validateRawText() {
+    el.rawTextEditor.setAttribute('aria-busy', 'false');
+    let parsed;
+    try { parsed = parseListText(el.rawTextEditor.value); }
+    catch (cause) {
+      rawInvalidLines.clear(); syncRawScroll();
+      el.rawTextEditor.setAttribute('aria-invalid', 'true');
+      el.rawRetrySave.hidden = true;
+      el.editorStatusText.textContent = cause.message; return null;
+    }
+    rawInvalidLines = new Set(parsed.errors.map(row => row.line));
+    syncRawScroll();
+    el.rawTextEditor.setAttribute('aria-invalid', String(rawInvalidLines.size > 0));
+    if (rawInvalidLines.size) {
+      const reference = parsed.errors.find(row => row.code === 'UNSUPPORTED_INCLUDE');
+      el.editorStatusText.textContent = t('dlRawInvalid', 'Не сохранено. Ошибочных строк: $1 (первая: $2). Исправьте подсвеченные строки.', [rawInvalidLines.size, parsed.errors[0].line])
+        + (reference ? ' ' + reference.error : '');
+      el.rawRetrySave.hidden = true;
+    } else {
+      el.rawRetrySave.hidden = !rawConflict && !loadFailed;
+    }
+    return parsed;
+  }
 
   function setSaveStatus(kind, text) {
     if (!el.saveStatusText) return;
@@ -99,25 +164,19 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     if (revision !== loadRevision || rawEditorDirty || pendingSaves) return;
     if (validResponse(res)) {
       const mods = snapshot(res.data);
-      if (scoped) listDomains = [...(res.data.list?.domains || [])];
+
       el.retrySitesLoad.hidden = true;
       if (loadFailed) setSaveStatus('saved', t("msg_autosave_c04c99b6", "✓ Автосохранение"));
       loadFailed = false;
       const catalogChanged = updateCatalog(mods);
       onApplicationState(res.settingsState);
       if (mods.unchanged && loaded) { if (catalogChanged) render(); renderBusy(); return; }
-      state.exceptions = Object.assign({}, mods.exceptions || {});
-      state.whitelist = [...(mods.whitelist || [])];
-      state.pacBypassDomains = [...(mods.pacBypassDomains || [])];
-      state.ruleMeta = mods.ruleMeta || {};
-      state.domainProxyIds = mods.domainProxyIds || {};
-      dataRevision = Number.isSafeInteger(mods.revision) ? mods.revision : null;
+      applySnapshot(mods);
       loaded = true;
       setControlsEnabled(true);
       el.importFileBtn.disabled = state.rawMode;
       el.exportFileBtn.disabled = state.rawMode;
       el.retrySitesLoad.hidden = true;
-      onApplicationState(res.settingsState);
       render();
       if (state.rawMode) fillRawEditor();
     } else {
@@ -139,6 +198,7 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     const defaultId = data.defaultProxyId ?? null;
     if (defaultId === state.defaultProxyId && JSON.stringify(catalog) === JSON.stringify(state.proxyCatalog)) return false;
     state.proxyCatalog = catalog;
+    proxySelectTemplate = null;
     state.defaultProxyId = defaultId;
     const previous = el.newRuleProxy.value;
     const eligible = state.proxyCatalog.filter(proxy => proxy.enabled);
@@ -163,15 +223,14 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     if ([...select.options].some(option => option.value === value)) select.value = value;
   }
 
-  function applySnapshot(source) {
-    const data = snapshot(source);
-    if (scoped) listDomains = [...(source.list?.domains || [])];
-    updateCatalog(data);
+  function applySnapshot(data) {
+    if (scoped) listDomains = [...(data.list?.domains || [])];
     state.exceptions = { ...(data.exceptions || {}) };
     state.whitelist = [...(data.whitelist || [])];
     state.pacBypassDomains = [...(data.pacBypassDomains || [])];
     state.ruleMeta = data.ruleMeta || {};
     state.domainProxyIds = data.domainProxyIds || {};
+    cardIndex = createDomainCardIndex(state);
     dataRevision = Number.isSafeInteger(data.revision) ? data.revision : null;
     for (const domain of selectedDomains) if (state.exceptions[domain] !== true) selectedDomains.delete(domain);
   }
@@ -213,7 +272,8 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
           el.retrySitesLoad.hidden = false;
           return false;
         }
-        applySnapshot(updated.data);
+        updateCatalog(updated.data);
+        applySnapshot(snapshot(updated.data));
         onApplicationState(updated.settingsState);
         rawConflict = false;
         el.rawRetrySave.hidden = true;
@@ -241,10 +301,12 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     setControlsEnabled(loaded && !loadFailed && !pendingSaves);
     // Keep typing available while the previous raw save is acknowledged.
     el.rawTextEditor.disabled = !loaded;
+    if (el.rawWildcardBtn) el.rawWildcardBtn.disabled = !loaded;
     el.rawRetrySave.disabled = !loaded || Boolean(pendingSaves);
     el.importFileBtn.disabled = !loaded || loadFailed || Boolean(pendingSaves) || state.rawMode;
     el.exportFileBtn.disabled = !loaded || loadFailed || Boolean(pendingSaves) || state.rawMode;
     el.bulkAssign.disabled = Boolean(pendingSaves) || !selectedDomains.size || !el.bulkProxy.value;
+    if (el.bulkWildcardBtn) el.bulkWildcardBtn.disabled = !loaded || loadFailed || Boolean(pendingSaves) || !selectedDomains.size;
     if (el.bulkDelete) el.bulkDelete.disabled = !loaded || loadFailed || Boolean(pendingSaves) || !selectedDomains.size;
     if (scoped) {
       el.newRuleProxyRow.hidden = true; el.proxyFilter.hidden = true; el.sourceFilter.hidden = true;
@@ -271,23 +333,23 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
 
   let renderedCount = 0;
   let currentFilteredItems = [];
+  let filteredSelectionCount = 0;
+  let cardIndex = createDomainCardIndex(state);
+  let searchTimer = null;
+  let proxySelectTemplate = null;
   const CHUNK_SIZE = 100;
+  const SEARCH_DELAY_MS = 175;
+
+  function cancelSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
 
   function render() {
-    let incCount = 0;
-    let excCount = 0;
-    for (const k in state.exceptions) {
-      if (Object.prototype.hasOwnProperty.call(state.exceptions, k)) {
-        if (state.exceptions[k] === true) incCount++;
-        else if (state.exceptions[k] === false) excCount++;
-      }
-    }
-    const whiteCount = (state.whitelist && state.whitelist.length) || 0;
-
-    if (el.includedCount) el.includedCount.textContent = incCount;
-    if (el.excludedCount) el.excludedCount.textContent = excCount;
-    if (el.whitelistCount) el.whitelistCount.textContent = whiteCount;
-    if (el.pacCount) el.pacCount.textContent = state.pacBypassDomains.length;
+    if (el.includedCount) el.includedCount.textContent = cardIndex.count('included');
+    if (el.excludedCount) el.excludedCount.textContent = cardIndex.count('excluded');
+    if (el.whitelistCount) el.whitelistCount.textContent = cardIndex.count('whitelist');
+    if (el.pacCount) el.pacCount.textContent = cardIndex.count('pac');
 
     el.tabBtns.forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.subtab === state.activeSubTab);
@@ -304,36 +366,18 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
   }
 
   function renderDomainCards() {
+    cancelSearch();
     if (!el.domainListContainer) return;
-    const filter = (el.searchDomainInput?.value || '').toLowerCase().trim();
-
-    let items = [];
-    if (state.activeSubTab === 'included') {
-      for (const k in state.exceptions) {
-        if (state.exceptions[k] === true) items.push(k);
-      }
-    } else if (state.activeSubTab === 'excluded') {
-      for (const k in state.exceptions) {
-        if (state.exceptions[k] === false) items.push(k);
-      }
-    } else if (state.activeSubTab === 'whitelist') {
-      items = [...state.whitelist];
-    } else if (state.activeSubTab === 'pac') {
-      items = [...state.pacBypassDomains];
-    }
-
-    if (filter) {
-      items = items.filter((d) => d.toLowerCase().includes(filter));
-    }
-    const source = scoped ? '' : el.sourceFilter.value;
-    if (source) items = items.filter(domain => state.ruleMeta[`${state.activeSubTab === 'whitelist' ? 'whitelist' : 'exception'}:${domain}`]?.source === source);
-
-    if (!scoped && state.activeSubTab === 'included' && el.proxyFilter.value) {
-      items = items.filter(domain => el.proxyFilter.value === 'legacy'
-        ? !state.domainProxyIds[domain] : state.domainProxyIds[domain] === el.proxyFilter.value);
-    }
-    items.sort();
+    const items = cardIndex.filter(state.activeSubTab, {
+      query: (el.searchDomainInput?.value || '').toLowerCase().trim(),
+      source: scoped ? '' : el.sourceFilter.value,
+      proxy: !scoped && state.activeSubTab === 'included' ? el.proxyFilter.value : '',
+      ruleMeta: state.ruleMeta,
+      domainProxyIds: state.domainProxyIds,
+    });
     currentFilteredItems = items;
+    filteredSelectionCount = 0;
+    if (selectedDomains.size) for (const domain of items) if (selectedDomains.has(domain)) filteredSelectionCount++;
     updateSelection();
     renderedCount = 0;
     el.domainListContainer.innerHTML = '';
@@ -387,20 +431,23 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
       }
       card.appendChild(nameSpan);
       if (!scoped && state.activeSubTab === 'included') {
-        const select = document.createElement('select');
-        select.className = 'domain-proxy-select';
+        if (!proxySelectTemplate) {
+          proxySelectTemplate = document.createElement('select');
+          proxySelectTemplate.className = 'domain-proxy-select';
+          fillTargets(proxySelectTemplate, state.proxyCatalog, '', true);
+          // Legacy is a display state, not a new assignment target.
+          proxySelectTemplate.options[0].disabled = true;
+        }
+        const select = proxySelectTemplate.cloneNode(true);
         select.dataset.domain = domain;
         select.setAttribute('aria-label', t('mpDomainTarget', 'Прокси для $1', [domain]));
-        fillTargets(select, state.proxyCatalog, state.domainProxyIds[domain] || '', true);
         const assigned = state.domainProxyIds[domain];
         if (assigned && !state.proxyCatalog.some(proxy => proxy.id === assigned)) {
           const missing = new Option(t('mpMissingProxy', 'Прокси недоступен'), assigned);
           missing.disabled = true;
           select.add(missing);
-          select.value = assigned;
         }
-        // Legacy is a display state, not a new assignment target.
-        select.options[0].disabled = true;
+        select.value = assigned || '';
         card.appendChild(select);
       }
       const meta = state.ruleMeta[`${state.activeSubTab === 'whitelist' ? 'whitelist' : 'exception'}:${domain}`];
@@ -413,17 +460,122 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
       fragment.appendChild(card);
     });
 
+    const scopedCheckboxes = scoped ? [...fragment.querySelectorAll('.domain-select')] : [];
+    if (!loaded || loadFailed || pendingSaves) {
+      for (const control of fragment.querySelectorAll('button, input, select')) control.disabled = true;
+    }
     refreshSettingsHelp(fragment);
     el.domainListContainer.appendChild(fragment);
+    if (scopedCheckboxes.length) {
+      const description = t('settings_help_dl_select', 'Отметить домен для удаления из этого листа.');
+      for (const checkbox of scopedCheckboxes) {
+        checkbox.title = description;
+        checkbox.setAttribute('aria-description', description);
+        if (checkbox.closest('label')) checkbox.closest('label').title = description;
+      }
+    }
     renderedCount += nextBatch.length;
   }
 
   function updateSelection() {
-    const count = currentFilteredItems.filter(domain => selectedDomains.has(domain)).length;
+    const count = filteredSelectionCount;
     el.selectAllFiltered.checked = Boolean(currentFilteredItems.length) && count === currentFilteredItems.length;
     el.selectAllFiltered.indeterminate = count > 0 && count < currentFilteredItems.length;
     el.selectionCount.textContent = t('mpSelectionCount', 'Выбрано: $1 · найдено: $2', [selectedDomains.size, currentFilteredItems.length]);
     el.bulkAssign.disabled = Boolean(pendingSaves) || !selectedDomains.size || !el.bulkProxy.value;
+    if (el.bulkWildcardBtn) el.bulkWildcardBtn.disabled = !loaded || loadFailed || Boolean(pendingSaves) || !selectedDomains.size;
+    if (el.bulkDelete) el.bulkDelete.disabled = !loaded || loadFailed || Boolean(pendingSaves) || !selectedDomains.size;
+  }
+
+  async function toggleSelectedWildcards() {
+    if (!loaded || loadFailed || pendingSaves || !selectedDomains.size) return;
+    const revision = dataRevision;
+    const domains = [...selectedDomains];
+    const parsed = domains.map((domain) => ({ raw: domain, norm: normalizeDomainRule(domain) }));
+    const toggleable = parsed.filter(({ norm }) => {
+      if (!norm.valid) return false;
+      const bare = norm.domain.replace(/^\*\./, '');
+      return norm.domain.startsWith('*.') || (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(bare) && !bare.includes(':'));
+    });
+    if (!toggleable.length) return;
+    const removePrefix = toggleable.every(({ norm }) => norm.domain.startsWith('*.'));
+    const nextSelection = new Set();
+    const renames = [];
+    for (const domain of domains) {
+      const toggled = toggleWildcardDomain(domain, removePrefix);
+      const target = toggled.valid ? toggled.domain : domain;
+      nextSelection.add(target);
+      if (toggled.changed) renames.push({ from: domain, to: target });
+    }
+    if (!renames.length) return;
+
+    if (scoped) {
+      const renameMap = new Map(renames.map((r) => [r.from, r.to]));
+      const nextList = [...new Set(listDomains.map((d) => renameMap.get(d) || d))];
+      selectedDomains.clear();
+      for (const d of nextSelection) selectedDomains.add(d);
+      const ok = await commit(() => ({ action: 'SAVE_DOMAIN_LIST', listId, domains: nextList, expectedRevision: revision }));
+      if (!ok) {
+        selectedDomains.clear();
+        for (const d of domains) selectedDomains.add(d);
+        syncVisibleSelection();
+      }
+      return;
+    }
+
+    const addedTargets = new Set(renames.map((r) => r.to));
+    const enabledIds = new Set(state.proxyCatalog.filter((p) => p.enabled).map((p) => p.id));
+    const fallbackProxy = (el.newRuleProxy.value && enabledIds.has(el.newRuleProxy.value) ? el.newRuleProxy.value : '')
+      || (state.defaultProxyId && enabledIds.has(state.defaultProxyId) ? state.defaultProxyId : '')
+      || state.proxyCatalog.find((p) => p.enabled)?.id || '';
+    const operations = [];
+    for (const { from, to } of renames) {
+      const existingProxy = state.exceptions[to] === true ? state.domainProxyIds[to] : undefined;
+      const assigned = existingProxy || state.domainProxyIds[from];
+      const proxyId = (assigned && enabledIds.has(assigned)) ? assigned : fallbackProxy;
+      const addOp = { domain: to, mode: 'proxy' };
+      if (proxyId) addOp.proxyId = proxyId;
+      operations.push(addOp);
+      if (!addedTargets.has(from)) {
+        operations.push({ domain: from, mode: 'pac' });
+      }
+    }
+    selectedDomains.clear();
+    for (const d of nextSelection) selectedDomains.add(d);
+    const ok = await mutate(operations, revision);
+    if (!ok) {
+      selectedDomains.clear();
+      for (const d of domains) selectedDomains.add(d);
+      syncVisibleSelection();
+    }
+  }
+
+  function toggleRawSelectionWildcard() {
+    if (!loaded || !el.rawTextEditor || el.rawTextEditor.disabled) return;
+    const editor = el.rawTextEditor;
+    const result = toggleWildcardLines(editor.value, editor.selectionStart, editor.selectionEnd);
+    if (!result.changed) return;
+    const scrollTop = editor.scrollTop;
+    const scrollLeft = editor.scrollLeft;
+    editor.value = result.text;
+    editor.focus();
+    editor.setSelectionRange(result.selectionStart, result.selectionEnd);
+    editor.scrollTop = scrollTop;
+    editor.scrollLeft = scrollLeft;
+    scheduleRawTextAutosave();
+  }
+
+  function syncVisibleSelection() {
+    for (const checkbox of el.domainListContainer.querySelectorAll('.domain-select')) {
+      checkbox.checked = selectedDomains.has(checkbox.dataset.domain);
+    }
+    updateSelection();
+  }
+
+  function clearSelection() {
+    selectedDomains.clear();
+    filteredSelectionCount = 0;
+    syncVisibleSelection();
   }
 
   async function addDomain(rawDomain) {
@@ -452,95 +604,6 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     await mutate(domains.map(domain => ({ domain, mode: whitelist ? 'whitelist-remove' : 'pac' })),revision);
   }
 
-  function parseAndValidateDomainLines(lines) {
-    return parseDomainRuleLines(lines);
-  }
-
-  /**
-   * Safely parse and validate domains from an uploaded File object.
-   */
-  async function parseAndValidateDomainFile(file) {
-    if (!file) {
-      throw new Error(t("msg_no_file_selected_69848927", "Файл не выбран"));
-    }
-
-    // 1. Check file extension against known incompatible/dangerous binary extensions
-    const fileName = (file.name || '').toLowerCase();
-    const ext = fileName.includes('.') ? fileName.split('.').pop() : '';
-    const dangerousExts = [
-      'exe', 'dll', 'bin', 'zip', 'rar', '7z', 'tar', 'gz', 'iso', 'pdf',
-      'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mp3', 'avi', 'mkv',
-      'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'apk', 'dmg', 'class',
-      'jar', 'dat', 'db', 'sqlite'
-    ];
-
-    if (ext && dangerousExts.includes(ext)) {
-      throw new Error(t("msg_unsupported_file_format_sub_only_text_files_t_cf5e1a57", "Файл имеет неподдерживаемый формат (.$1). Поддерживаются только текстовые файлы (.txt) со списком доменов.", [ext]));
-    }
-
-    // 2. File size limit (5MB max ~ 100,000 domains)
-    const MAX_SIZE = 5 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      throw new Error(t("msg_the_file_is_too_large_sub_mb_the_maximum_text_91d224d0", "Файл слишком большой ($1 МБ). Максимальный размер текстового файла: 5 МБ.", [(file.size / (1024 * 1024)).toFixed(1)]));
-    }
-
-    // 3. Read file safely as text (UTF-8) with timeout
-    let rawText = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      const timer = setTimeout(() => {
-        reader.abort();
-        reject(new Error(t("msg_reading_the_file_timed_out_17a620bb", "Превышено время чтения файла")));
-      }, 15000);
-
-      reader.onload = () => {
-        clearTimeout(timer);
-        resolve(reader.result);
-      };
-      reader.onerror = () => {
-        clearTimeout(timer);
-        reject(new Error(t("msg_failed_to_read_the_file_9985b0ad", "Не удалось прочитать файл")));
-      };
-      reader.onabort = () => {
-        clearTimeout(timer);
-        reject(new Error(t("msg_file_reading_was_cancelled_0f5f331d", "Чтение файла прервано")));
-      };
-
-      reader.readAsText(file, 'UTF-8');
-    });
-
-    if (typeof rawText !== 'string') {
-      throw new Error(t("msg_failed_to_decode_the_file_contents_4db11ffb", "Не удалось декодировать содержимое файла"));
-    }
-
-    // 4. Strip UTF-8 Byte Order Mark (BOM) if present
-    if (rawText.charCodeAt(0) === 0xFEFF) {
-      rawText = rawText.slice(1);
-    }
-
-    if (!rawText.trim()) {
-      throw new Error(t("msg_the_file_is_empty_or_contains_only_whitespace_43e3a1ec", "Файл пуст или содержит только пробелы"));
-    }
-
-    // 5. Binary data protection (check first 8KB for null bytes and non-printable control chars)
-    const sample = rawText.slice(0, 8192);
-    // eslint-disable-next-line no-control-regex
-    if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(sample)) {
-      throw new Error(t("msg_the_file_contains_unreadable_binary_data_only_c1ccf183", "Файл содержит нечитаемые бинарные данные. Поддерживаются только текстовые файлы (.txt) в кодировке UTF-8."));
-    }
-
-    // 6. Tokenize line by line (support CRLF, LF, CR) and validate
-    const allLines = rawText.split(/\r?\n|\r/);
-    const lines = allLines.slice(0, 100000);
-    const { validDomains, skippedCount } = parseAndValidateDomainLines(lines);
-
-    if (validDomains.length === 0) {
-      throw new Error(t("msg_no_valid_domain_names_were_found_in_the_file__2067fc4b", "В файле не найдено ни одного корректного доменного имени (пропущено некорректных строк: $1).", [skippedCount]));
-    }
-
-    return { validDomains, skippedCount };
-  }
-
-  // Handle File Import
   async function handleFileImport(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -552,7 +615,7 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
         if (!await confirmListAction(element,t('dlReplace','Заменить домены этого листа?'),listPreviewText(parsed))) return;
         if (gen !== resetGeneration) return;
         await commit(() => ({action:'SAVE_DOMAIN_LIST',listId,domains:parsed.validDomains,expectedRevision:revision}));
-      } catch(cause) { showToast(cause.message); }
+      } catch(cause) { if (gen === resetGeneration) showToast(cause.message); }
       finally { e.target.value = ''; }
       return;
     }
@@ -562,7 +625,7 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     const proxyId = target === 'included' ? el.newRuleProxy.value || undefined : undefined;
 
     try {
-      const { validDomains, skippedCount } = await parseAndValidateDomainFile(file);
+      const { validDomains, skippedCount } = await readManualDomainFile(file);
       if (importGeneration !== resetGeneration) return;
       if (target === 'pac') {
         await mutate(validDomains.map(domain=>({domain,mode:'pac-bypass'})),importBaseRevision);
@@ -574,7 +637,7 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
       showToast(t('mpImportCounts', 'Добавлено: $1 · изменено: $2 · без изменений: $3 · пропущено строк: $4',
         [saved.data.added, saved.data.changed, saved.data.unchanged, skippedCount]), 4500);
     } catch (err) {
-      showToast(t("msg_import_failed_sub_24315934", "❌ Ошибка загрузки: $1", [err.message]), 5500);
+      if (importGeneration === resetGeneration) showToast(t("msg_import_failed_sub_24315934", "❌ Ошибка загрузки: $1", [err.message]), 5500);
     } finally {
       // Reset file input so user can re-upload the same file if needed
       if (el.fileImportInput) el.fileImportInput.value = '';
@@ -582,11 +645,25 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
   }
 
   // Handle File Export
-  function handleFileExport() {
+  async function handleFileExport() {
     let domains = [];
     let fileName = 'domains.txt';
 
-    if (state.activeSubTab === 'included') {
+    if (scoped) {
+      const generation = resetGeneration;
+      try {
+        // Read name and contents from one saved snapshot; another options tab
+        // may have renamed the list before our deferred refresh runs.
+        const response = await sendMessage(readRequest());
+        if (generation !== resetGeneration) return;
+        if (!validResponse(response) || typeof response.data.list.name !== 'string') throw new Error('List unavailable');
+        domains = [...response.data.list.domains].sort();
+        fileName = domainListExportFilename(response.data.list.name);
+      } catch {
+        if (generation === resetGeneration) showToast(t('msg_failed_to_load_data_de4395f1', 'Ошибка загрузки данных'));
+        return;
+      }
+    } else if (state.activeSubTab === 'included') {
       domains = Object.keys(state.exceptions).filter((k) => state.exceptions[k] === true).sort();
       fileName = 'proxied-domains.txt';
     } else if (state.activeSubTab === 'excluded') {
@@ -618,12 +695,20 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     showToast(t("msg_exported_sub_domains_to_sub_5cb228f3", "✓ Экспортировано $1 доменов в файл $2!", [domains.length, fileName]));
   }
 
-  async function toggleMode() {
+  let editorActionBusy = false;
+  const runEditorAction = action => async () => {
+    if (editorActionBusy) return;
+    editorActionBusy = true;
+    try { await action(resetGeneration); }
+    finally { editorActionBusy = false; }
+  };
+
+  async function toggleMode(generation) {
     await saveQueue;
+    if (generation !== resetGeneration) return;
     if (!state.rawMode) {
       state.rawMode = true;
       render();
-      fillRawEditor();
       if (!scoped) root.querySelector('.editor-help-card').textContent = state.activeSubTab === 'pac'
         ? t('dlRawHelp','Один домен или wildcard на строку. URL преобразуются в домены; пути не учитываются.')
         : manualRawHelp;
@@ -631,13 +716,11 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
       el.exportFileBtn.disabled = true;
       el.listViewSection.style.display = 'none';
       el.editorViewSection.style.display = 'block';
+      fillRawEditor();
       el.modeToggleBtn.textContent = t("msg_list_a3e77aea", "📋 Список");
       rawEditorDirty = false;
-      if (el.editorStatusText) {
-        el.editorStatusText.textContent = t("msg_changes_are_saved_automatically_6ce33e8e", "Изменения сохраняются автоматически");
-      }
     } else {
-      if (!await flush()) return;
+      if (!await flush() || generation !== resetGeneration) return;
       state.rawMode = false;
       el.importFileBtn.disabled = false;
       el.exportFileBtn.disabled = false;
@@ -649,11 +732,15 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
   }
 
   function fillRawEditor() {
-    if (scoped) { el.rawTextEditor.value = listDomains.join('\n'); return; }
-    if (state.activeSubTab === 'pac') { el.rawTextEditor.value = state.pacBypassDomains.join('\n'); return; }
-    const incList = Object.keys(state.exceptions).filter(k => state.exceptions[k] === true);
-    const excList = Object.keys(state.exceptions).filter(k => state.exceptions[k] === false);
-    el.rawTextEditor.value = t("msg_proxy_sub_direct_sub_allowlist_sub_9f111eff", "# ПРОКСИРОВАТЬ:\n$1\n\n===============================\n# НЕ ПРОКСИРОВАТЬ:\n$2\n\n===============================\n# БЕЛЫЙ СПИСОК:\n$3\n", [incList.join('\n'), excList.join('\n'), state.whitelist.join('\n')]);
+    if (scoped) el.rawTextEditor.value = listDomains.join('\n');
+    else if (state.activeSubTab === 'pac') el.rawTextEditor.value = state.pacBypassDomains.join('\n');
+    else {
+      const incList = Object.keys(state.exceptions).filter(k => state.exceptions[k] === true);
+      const excList = Object.keys(state.exceptions).filter(k => state.exceptions[k] === false);
+      el.rawTextEditor.value = t("msg_proxy_sub_direct_sub_allowlist_sub_9f111eff", "# ПРОКСИРОВАТЬ:\n$1\n\n===============================\n# НЕ ПРОКСИРОВАТЬ:\n$2\n\n===============================\n# БЕЛЫЙ СПИСОК:\n$3\n", [incList.join('\n'), excList.join('\n'), state.whitelist.join('\n')]);
+    }
+    const parsed = validateRawText();
+    if (parsed && !parsed.skippedCount) el.editorStatusText.textContent = t('msg_changes_are_saved_automatically_6ce33e8e', 'Изменения сохраняются автоматически');
   }
 
   async function saveRawText(editRevision = rawEditRevision) {
@@ -662,15 +749,11 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
       rawAutosaveTimer = null;
     }
     const text = el.rawTextEditor.value;
+    const validation = validateRawText();
+    if (!validation || validation.skippedCount) return false;
     if (scoped || state.activeSubTab === 'pac') {
       if (rawConflict) return false;
-      let parsed;
-      try { parsed = parseListText(text); }
-      catch(cause) { el.editorStatusText.textContent=cause.message; return false; }
-      if (parsed.skippedCount) {
-        el.editorStatusText.textContent=listPreviewText(parsed); el.rawRetrySave.hidden=false;
-        return false;
-      }
+      const parsed = validation;
       const result = await commit(() => scoped ? {action:'SAVE_DOMAIN_LIST',listId,domains:parsed.validDomains,expectedRevision:dataRevision}
         : {action:'SAVE_MODS',mods:{pacBypassDomains:parsed.validDomains},expectedRevision:dataRevision},{raw:true});
       if (result && editRevision === rawEditRevision) { rawEditorDirty=false; el.editorStatusText.textContent=t('msg_saved_6c67d096','✓ Сохранено'); }
@@ -678,13 +761,13 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     }
     const sections = text
       .trim()
-      .split(/=+/g)
+      .split(/^[^\S\r\n]*=+[^\S\r\n]*$/m)
       .map((s) => s.trim().split(/(?:\s*\r?\n\s*)+/g).filter(Boolean));
 
     const [incRaw = [], excRaw = [], whiteRaw = []] = sections;
-    const incRes = parseAndValidateDomainLines(incRaw);
-    const excRes = parseAndValidateDomainLines(excRaw);
-    const whiteRes = parseAndValidateDomainLines(whiteRaw);
+    const incRes = parseDomainRuleLines(incRaw);
+    const excRes = parseDomainRuleLines(excRaw);
+    const whiteRes = parseDomainRuleLines(whiteRaw);
 
     const totalSkipped = incRes.skippedCount + excRes.skippedCount + whiteRes.skippedCount;
 
@@ -718,6 +801,16 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     if (el.editorStatusText) {
       el.editorStatusText.textContent = t("msg_changes_will_be_saved_automatically_6db8e4d6", "Изменения будут сохранены автоматически…");
     }
+    // Large lists are validated after typing settles (or synchronously on
+    // flush), never once per keystroke. saveRawText validates before any write.
+    if (el.rawTextEditor.value.length <= 65536) {
+      const parsed = validateRawText();
+      if (!parsed || parsed.skippedCount) { rawAutosaveTimer = null; return; }
+    } else {
+      rawInvalidLines.clear(); rawHighlights.replaceChildren();
+      el.rawTextEditor.setAttribute('aria-busy', 'true');
+      el.rawRetrySave.hidden = true;
+    }
     const editRevision = rawEditRevision;
     rawAutosaveTimer = setTimeout(() => {
       rawAutosaveTimer = null;
@@ -740,55 +833,65 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     el.sourceFilter.addEventListener('change', renderDomainCards);
     el.proxyFilter.addEventListener('change', renderDomainCards);
     el.bulkProxy.addEventListener('change', updateSelection);
-    el.clearSelection.addEventListener('click', () => { selectedDomains.clear(); render(); });
+    el.clearSelection.addEventListener('click', clearSelection);
     el.bulkDelete?.addEventListener('click',async()=>{
       const revision=dataRevision, generation=resetGeneration;
       const domains=[...selectedDomains];
       if (!domains.length || !await confirmListAction(element,t('mpClearRules','Удалить правила текущего списка ($1)?',[domains.length]))) return;
       if (generation !== resetGeneration) return;
-      if(await mutate(domains.map(domain=>({domain,mode:'pac'})),revision)) { selectedDomains.clear(); render(); }
+      if(await mutate(domains.map(domain=>({domain,mode:'pac'})),revision)) clearSelection();
     });
     el.selectAllFiltered.addEventListener('change', () => {
+      const checked = el.selectAllFiltered.checked;
+      if (searchTimer !== null) renderDomainCards();
       for (const domain of currentFilteredItems) {
-        if (el.selectAllFiltered.checked) selectedDomains.add(domain);
+        if (checked) selectedDomains.add(domain);
         else selectedDomains.delete(domain);
       }
-      render();
+      filteredSelectionCount = checked ? currentFilteredItems.length : 0;
+      syncVisibleSelection();
     });
     el.bulkAssign.addEventListener('click', async () => {
       const domains = [...selectedDomains];
-      if (await assign(domains, el.bulkProxy.value)) {
-        domains.forEach(domain => selectedDomains.delete(domain));
-        render();
-      }
+      if (await assign(domains, el.bulkProxy.value)) clearSelection();
     });
+    el.bulkWildcardBtn?.addEventListener('click', toggleSelectedWildcards);
+    if (el.rawWildcardBtn) {
+      el.rawWildcardBtn.addEventListener('mousedown', (e) => e.preventDefault());
+      el.rawWildcardBtn.addEventListener('click', toggleRawSelectionWildcard);
+    }
     el.domainListContainer.addEventListener('change', async event => {
       const target = event.target;
       if (target.matches('.domain-select')) {
-        if (target.checked) selectedDomains.add(target.dataset.domain);
-        else selectedDomains.delete(target.dataset.domain);
+        const domain = target.dataset.domain;
+        if (target.checked && !selectedDomains.has(domain)) { selectedDomains.add(domain); filteredSelectionCount++; }
+        else if (!target.checked && selectedDomains.delete(domain)) filteredSelectionCount--;
         updateSelection();
       } else if (target.matches('.domain-proxy-select')) {
         const previous = state.domainProxyIds[target.dataset.domain] || '';
         if (!await assign([target.dataset.domain], target.value)) target.value = previous;
       }
     });
-    el.rawRetrySave.addEventListener('click', async () => {
+    el.rawRetrySave.addEventListener('click', runEditorAction(async generation => {
       if (pendingSaves) return;
-      const generation = resetGeneration;
+      const validation = validateRawText();
+      if (!validation || validation.skippedCount) return;
+      const editRevision = rawEditRevision;
       const response = await sendMessage(readRequest());
-      if (generation !== resetGeneration) return;
+      if (generation !== resetGeneration || editRevision !== rawEditRevision) return;
       if (!validResponse(response)) { showToast(t('msg_failed_to_load_data_de4395f1', 'Ошибка загрузки данных')); return; }
-      applySnapshot(response.data);
+      updateCatalog(response.data);
+      applySnapshot(snapshot(response.data));
       onApplicationState(response.settingsState);
       loadFailed = false;
       rawConflict = false;
       await saveRawText(rawEditRevision);
-    });
+    }));
     root.querySelector('#openHistoryBtn').addEventListener('click', () => navigate('history'));
     el.tabBtns.forEach((btn) => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', runEditorAction(async generation => {
         if (state.rawMode && !await flush()) return;
+        if (generation !== resetGeneration) return;
         state.activeSubTab = btn.dataset.subtab;
         selectedDomains.clear();
         render();
@@ -797,7 +900,7 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
           root.querySelector('.editor-help-card').textContent = state.activeSubTab === 'pac'
             ? t('dlRawHelp','Один домен или wildcard на строку. URL преобразуются в домены; пути не учитываются.') : manualRawHelp;
         }
-      });
+      }));
     });
 
     if (el.addDomainBtn && el.newDomainInput) {
@@ -808,7 +911,10 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     }
 
     if (el.searchDomainInput) {
-      el.searchDomainInput.addEventListener('input', renderDomainCards);
+      el.searchDomainInput.addEventListener('input', () => {
+        cancelSearch();
+        searchTimer = setTimeout(renderDomainCards, SEARCH_DELAY_MS);
+      });
     }
 
     if (el.clearListBtn) {
@@ -843,11 +949,12 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
     }
 
     if (el.modeToggleBtn) {
-      el.modeToggleBtn.addEventListener('click', toggleMode);
+      el.modeToggleBtn.addEventListener('click', runEditorAction(toggleMode));
     }
 
     if (el.rawTextEditor) {
       el.rawTextEditor.addEventListener('input', scheduleRawTextAutosave);
+      el.rawTextEditor.addEventListener('scroll', syncRawScroll);
     }
   }
 
@@ -862,9 +969,10 @@ function initDomainEditor(element, { notify, onApplicationState, navigate, listI
   return {
     refresh: loadData,
     activate: loadData,
-    cancelRead: () => { ++loadRevision; },
+    cancelRead: () => { ++loadRevision; cancelSearch(); },
     invalidate: () => {
       dataRevision = null; ++loadRevision; ++resetGeneration;
+      cancelSearch();
       loadFailed = true; el.retrySitesLoad.hidden = false;
       if (rawAutosaveTimer !== null) { clearTimeout(rawAutosaveTimer); rawAutosaveTimer = null; }
       if (rawEditorDirty) { rawConflict = true; el.rawRetrySave.hidden = false; }

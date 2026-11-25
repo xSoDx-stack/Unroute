@@ -32,11 +32,13 @@ export const applicationState = {
     return result;
   },
   applied(revision) { return this.save({ appliedRevision: revision || 0, error: '', appliedAt: Date.now() }); },
-  async reset() {
-    await queue;
-    if (ready) await ready.catch(() => {});
-    state = { appliedRevision: 0, error: '', appliedAt: 0 };
-    ready = null;
-    queue = Promise.resolve();
+  reset() {
+    const result = queue.then(async () => {
+      if (ready) await ready.catch(() => {});
+      state = { appliedRevision: 0, error: '', appliedAt: 0 };
+      ready = null;
+    });
+    queue = result.catch(() => {});
+    return result;
   },
 };

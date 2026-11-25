@@ -19,22 +19,40 @@ function storageCall(api, method, argument) {
   });
 }
 
+function readCachedAppearance(cache) {
+  try {
+    const raw = cache?.getItem?.(APPEARANCE_KEY);
+    return raw ? normalizeAppearance(JSON.parse(raw)) : null;
+  } catch { return null; }
+}
+
+function writeCachedAppearance(cache, value) {
+  try {
+    if (!value) cache?.removeItem?.(APPEARANCE_KEY);
+    else cache?.setItem?.(APPEARANCE_KEY, JSON.stringify(normalizeAppearance(value)));
+  } catch { /* Synchronous FOUC cache is best-effort; chrome.storage.local is authoritative. */ }
+}
+
 export function createAppearanceController({ chrome: api = globalThis.chrome, root = globalThis.document?.documentElement,
-  media = globalThis.matchMedia?.('(prefers-color-scheme: dark)'), debounceMs = 120 } = {}) {
-  let appearance = normalizeAppearance();
+  media = globalThis.matchMedia?.('(prefers-color-scheme: dark)'), debounceMs = 120,
+  cache = root?.ownerDocument?.defaultView?.localStorage } = {}) {
+  const syncCache = api?.storage?.local ? cache : null;
+  let appearance = readCachedAppearance(syncCache) || normalizeAppearance();
   let status = 'loading', error = '', errorKind = '';
   let pending = {}, timer, running, activeSnapshot, eventRevision = 0, resetRevision = 0, cleaningReset = false;
-  let resetGeneration;
+  let resetGeneration, destroyed = false;
   const generationOf = value => typeof value === 'string' ? value : undefined;
   const listeners = new Set();
   const getState = () => ({ appearance: { ...appearance }, status, error, errorKind });
   function publish() {
+    if (destroyed) return;
     const dark = appearance.theme === 'dark' || (appearance.theme === 'system' && Boolean(media?.matches));
     if (root) {
       root.dataset.theme = dark ? 'dark' : 'light';
       root.dataset.appearanceTheme = appearance.theme;
       root.dataset.accent = appearance.accent;
       root.style.setProperty('color-scheme', dark ? 'dark' : 'light');
+      root.style.setProperty('--custom-swatch', appearance.customColor);
       for (const [key, value] of Object.entries(getPalette(appearance, Boolean(media?.matches)))) root.style.setProperty('--' + key, value);
     }
     for (const listener of listeners) listener(getState());
@@ -45,10 +63,11 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
   function invalidatePending(generation) {
     resetGeneration = generation; resetRevision++;
     pending = {}; clearTimeout(timer); appearance = normalizeAppearance();
+    writeCachedAppearance(syncCache, null);
     status = activeSnapshot ? 'saving' : 'idle'; error = ''; errorKind = ''; publish();
   }
   const changed = (changes, area) => {
-    if (area !== 'local') return;
+    if (destroyed || area !== 'local') return;
     if (Object.hasOwn(changes, APPEARANCE_RESET_KEY)) {
       const generation = generationOf(changes[APPEARANCE_RESET_KEY].newValue);
       if (generation !== resetGeneration) { eventRevision++; invalidatePending(generation); }
@@ -62,7 +81,11 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
       if (cleaningReset) return;
       resetRevision++;
       pending = {}; clearTimeout(timer); appearance = incoming;
-    } else appearance = normalizeAppearance({ ...incoming, ...pending });
+      writeCachedAppearance(syncCache, null);
+    } else {
+      appearance = normalizeAppearance({ ...incoming, ...pending });
+      writeCachedAppearance(syncCache, incoming);
+    }
     // An external change is not a retry. Keep a failed pending write actionable.
     if (Object.keys(pending).length && errorKind === 'save') { publish(); return; }
     status = Object.keys(pending).length || activeSnapshot ? 'saving' : 'idle'; error = ''; errorKind = ''; publish();
@@ -74,15 +97,20 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
   publish();
   const initialRevision = eventRevision;
   const ready = storageCall(api, 'get', [APPEARANCE_KEY, APPEARANCE_RESET_KEY]).then(values => {
+    if (destroyed) return;
     if (eventRevision === initialRevision) {
       resetGeneration = generationOf(values?.[APPEARANCE_RESET_KEY]);
-      appearance = normalizeAppearance({ ...normalizeAppearance(values?.[APPEARANCE_KEY]), ...pending });
+      const storedAppearance = values?.[APPEARANCE_KEY];
+      writeCachedAppearance(syncCache, storedAppearance === undefined ? null : storedAppearance);
+      appearance = normalizeAppearance({ ...normalizeAppearance(storedAppearance), ...pending });
     }
-    status = Object.keys(pending).length ? 'saving' : 'idle'; publish();
-  }).catch(reason => fail(reason, 'load'));
+    if (status === 'loading') status = Object.keys(pending).length || activeSnapshot ? 'saving' : 'idle';
+    publish();
+  }).catch(reason => { if (!destroyed) fail(reason, 'load'); });
 
   async function drain() {
     await ready;
+    if (destroyed) return;
     // Read while holding the origin-wide lock: event delivery may lag behind
     // the reset's callback, and the appearance key may never have existed.
     try {
@@ -90,7 +118,7 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
       const generation = generationOf(record?.[APPEARANCE_RESET_KEY]);
       if (generation !== resetGeneration) { invalidatePending(generation); return; }
     } catch (reason) { fail(reason, 'save'); return; }
-    while (Object.keys(pending).length) {
+    while (!destroyed && Object.keys(pending).length) {
       const patch = pending; pending = {};
       const snapshot = normalizeAppearance({ ...appearance, ...patch });
       const resetAtStart = resetRevision;
@@ -108,6 +136,7 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
               await storageCall(api, 'remove', APPEARANCE_KEY);
               const check = await storageCall(api, 'get', APPEARANCE_KEY);
               if (check?.[APPEARANCE_KEY] !== undefined) throw new Error('Appearance reset could not be confirmed');
+              writeCachedAppearance(syncCache, null);
             } finally { cleaningReset = false; }
           }
           activeSnapshot = null; status = Object.keys(pending).length ? 'saving' : 'idle'; publish();
@@ -116,6 +145,7 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
         if (JSON.stringify(normalizeAppearance(stored?.[APPEARANCE_KEY])) !== JSON.stringify(snapshot)) {
           throw new Error('Appearance changed before saving could be confirmed');
         }
+        writeCachedAppearance(syncCache, snapshot);
         appearance = normalizeAppearance({ ...snapshot, ...pending });
         status = Object.keys(pending).length ? 'saving' : 'saved'; error = ''; errorKind = '';
       } catch (reason) {
@@ -128,20 +158,36 @@ export function createAppearanceController({ chrome: api = globalThis.chrome, ro
   }
   function flush() {
     clearTimeout(timer);
+    if (destroyed) return running || Promise.resolve();
     if (!running) running = Promise.resolve(withAppearanceWriteLock(drain)).finally(() => { running = null; });
     return running;
   }
   function update(patch) {
-    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return;
+    if (destroyed || !patch || typeof patch !== 'object' || Array.isArray(patch)) return;
     // Only known fields enter storage; invalid input is normalized, never interpolated into CSS.
     const next = normalizeAppearance({ ...appearance, ...patch });
     for (const key of ['theme', 'accent', 'customColor']) if (Object.hasOwn(patch, key)) pending[key] = next[key];
     appearance = next; status = 'saving'; error = ''; errorKind = ''; publish();
     clearTimeout(timer); timer = setTimeout(flush, debounceMs);
   }
-  return { ready, getState, update, flush,
-    subscribe(listener) { listeners.add(listener); listener(getState()); return () => listeners.delete(listener); },
+  const controller = { ready, getState, update, flush,
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      clearTimeout(timer);
+      pending = {};
+      listeners.clear();
+      if (controllers.get(root) === controller) controllers.delete(root);
+      try { api?.storage?.onChanged?.removeListener?.(changed); } catch { /* Context may already be gone. */ }
+      if (media?.addEventListener) media.removeEventListener?.('change', publish);
+      else media?.removeListener?.(publish);
+    },
+    subscribe(listener) {
+      if (destroyed) return () => {};
+      listeners.add(listener); listener(getState()); return () => listeners.delete(listener);
+    },
   };
+  return controller;
 }
 
 const controllers = new WeakMap();

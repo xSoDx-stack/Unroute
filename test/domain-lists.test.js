@@ -12,6 +12,59 @@ let lists;
 before(async () => { lists = await import('../src/common/core/domain-lists.js').catch(() => ({})); });
 
 describe('Canonical ordered domain lists', () => {
+  it('does not reuse validation results for edited input arrays or rows', () => {
+    const domains = ['old.test'];
+    const list = { id: 'a', name: 'A', proxyId: 'p', enabled: true, domains };
+    const input = [list];
+    const snapshot = lists.normalizeDomainLists(input);
+    domains[0] = 'new.test';
+    list.proxyId = 'next';
+    expect(snapshot[0]).to.include({ proxyId: 'p' });
+    expect(snapshot[0].domains).to.deep.equal(['old.test']);
+    expect(lists.normalizeDomainLists(input)[0]).to.deep.equal({ ...list, domains: ['new.test'] });
+    domains.push('invalid');
+    expect(() => lists.normalizeListDomains(domains)).to.throw().with.property('code', 'INVALID_DOMAIN_LIST');
+    expect(() => lists.normalizeDomainLists(input)).to.throw().with.property('code', 'INVALID_DOMAIN_LIST');
+    expect(lists.normalizeDomainLists(snapshot)).to.equal(snapshot);
+  });
+
+  it('updates matching for editable lists without invalidating canonical snapshots', () => {
+    const row = { id: 'a', name: 'A', proxyId: 'p', enabled: true, domains: ['old.test'] };
+    const input = [row];
+    const snapshot = lists.normalizeDomainLists(input);
+    expect(lists.matchDomainLists('old.test', input).matched).to.equal(true);
+    expect(lists.matchDomainLists('old.test', snapshot).matched).to.equal(true);
+    row.domains[0] = 'new.test';
+    expect(lists.matchDomainLists('old.test', input).matched).to.equal(false);
+    expect(lists.matchDomainLists('new.test', input).matched).to.equal(true);
+    expect(lists.matchDomainLists('old.test', snapshot).matched).to.equal(true);
+    row.enabled = false;
+    expect(lists.matchDomainLists('new.test', input).matched).to.equal(false);
+  });
+
+  it('disambiguates legacy duplicate names without changing IDs, routes or list contents', () => {
+    const values = ['Work', 'work', 'Work (2)'].map((name, i) => ({ id: `l${i}`, name, proxyId: 'p', enabled: true, domains: [`d${i}.test`] }));
+    const result = lists.normalizeDomainLists(values);
+    expect(result.map(list => list.name)).to.deep.equal(['Work', 'work (3)', 'Work (2)']);
+    expect(result.map(({ name: _name, ...rest }) => rest)).to.deep.equal(values.map(({ name: _name, ...rest }) => rest));
+    expect(values[1].name).to.equal('work');
+    expect(lists.normalizeDomainLists(result)).to.equal(result);
+  });
+  it('rejects duplicate names on create and rename, including case and Unicode normalization', () => {
+    const raw = { _rulesRevision: 0, domainLists: [
+      { id: 'a', name: 'Alpha', proxyId: 'p', enabled: true, domains: ['a.test'] },
+      { id: 'b', name: 'Beta', proxyId: 'p', enabled: false, domains: [] },
+    ] };
+    const catalog = [{ id: 'p', enabled: true }];
+    for (const name of ['Alpha', ' alpha ', 'Ａlpha']) {
+      expect(() => lists.saveDomainList(raw, { expectedRevision: 0, name, proxyId: 'p', enabled: true }, { catalog }))
+        .to.throw().with.property('code', 'DOMAIN_LIST_NAME_EXISTS');
+      expect(() => lists.saveDomainList(raw, { expectedRevision: 0, listId: 'b', name }, { catalog }))
+        .to.throw().with.property('code', 'DOMAIN_LIST_NAME_EXISTS');
+    }
+    expect(lists.saveDomainList(raw, { expectedRevision: 0, listId: 'a', name: 'ALPHA' }, { catalog }).domainLists[0].name).to.equal('ALPHA');
+    expect(raw.domainLists.map(list => list.name)).to.deep.equal(['Alpha', 'Beta']);
+  });
   it('tracks PAC override provenance, compact history and safe undo independently of lists', () => {
     const before = migrateSettings({ exceptions: {}, whitelist: [] });
     const after = recordRuleChange(before, { ...before, pacBypassDomains: ['PAC.test', 'pac.test'] });
@@ -76,7 +129,7 @@ describe('Canonical ordered domain lists', () => {
     expect(first.domainLists[0]).to.include({ name: 'A', proxyId: 'p', enabled: true });
     expect(first.domainLists[0].id).to.match(/^list:[\da-f-]{36}$/);
     expect(first.domainLists[0].domains).to.deep.equal(['example.test', '*.other.test']);
-    const second = lists.saveDomainList(first, { expectedRevision: 3, name: 'A', proxyId: 'p', enabled: false,
+    const second = lists.saveDomainList(first, { expectedRevision: 3, name: 'B', proxyId: 'p', enabled: false,
       domains: ['example.test'] }, { catalog });
     expect(second.domainLists).to.have.length(2);
     expect(second.domainLists[0]).to.equal(first.domainLists[0]);
@@ -178,7 +231,7 @@ describe('Domain list RPC persistence', () => {
     settingsCoordinator.state = original.state;
     pacKitchen.invalidateCache();
   });
-  const send = message => new Promise(resolve => listener(message, { id: 'test' }, resolve));
+  const send = message => new Promise(resolve => listener(message, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
   it('serializes create/update/reorder/delete with global conflicts and metadata-only retrieval', async () => {
     await pacKitchen.updatePacMods(raw => ({ ...raw, ifUseLocalTor: true }));
     const first = await send({ action: 'GET_DOMAIN_LISTS' });
@@ -192,6 +245,10 @@ describe('Domain list RPC persistence', () => {
     const metadata = await send({ action: 'GET_DOMAIN_LISTS' });
     const id = metadata.data.lists[0].id;
     expect(metadata.data.lists[0]).to.deep.equal({ id, name: 'One', proxyId: 'builtin:tor', enabled: true, count: 1 });
+    const duplicate = await send({ ...create(' one '), expectedRevision: metadata.data.revision });
+    expect(duplicate).to.include({ success: false, errorCode: 'DOMAIN_LIST_NAME_EXISTS' });
+    expect(duplicate.error).to.match(/уже существует|already exists/);
+    expect((await pacKitchen.getRawPacMods()).domainLists).to.have.length(1);
     const detail = await send({ action: 'GET_DOMAIN_LIST', listId: id });
     expect(detail.data.list.domains).to.deep.equal(['one.test']);
     expect(detail).to.have.property('settingsState');

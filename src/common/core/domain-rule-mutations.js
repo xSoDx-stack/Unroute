@@ -35,6 +35,10 @@ export function applyDomainRuleMutations(raw, operations, { catalog = [], expect
   if (!Array.isArray(operations) || operations.length > 100000) {
     throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный список изменений сайтов.');
   }
+  return applyDeltas(raw, operations, catalog);
+}
+
+function applyDeltas(raw, operations, catalog) {
   let exceptions = raw.exceptions || {};
   let assignments = raw.domainProxyIds || {};
   let whitelist = raw.whitelist || [];
@@ -109,8 +113,8 @@ export function applyDomainRuleMutations(raw, operations, { catalog = [], expect
     const afterPac = !before.whitelistOperation && (pacSet || originalPacSet).has(before.domain);
     if (before.value === after && before.proxyId === afterProxy && before.pac === afterPac) unchanged++;
     else if (!before.pac && afterPac && before.value === null) added++;
-    else if ((before.whitelistOperation ? before.value === false : before.value === null) && after !== null && after !== false) added++;
-    else if (!before.whitelistOperation && before.value === null && after === false) added++;
+    else if (!before.pac && (before.whitelistOperation ? before.value === false : before.value === null) && after !== null && after !== false) added++;
+    else if (!before.pac && !before.whitelistOperation && before.value === null && after === false) added++;
     else changed++;
   }
   return { settings: { ...raw, exceptions, domainProxyIds: assignments, whitelist,
@@ -134,11 +138,13 @@ export function assignDomainProxies(raw, domains, proxyId, options = {}) {
 export function replaceDomainRuleLists(raw, patch, options = {}) {
   requireRuleRevision(raw, options.expectedRevision, true);
   const operations = [];
+  let normalized;
   if (Object.hasOwn(patch, 'exceptions')) {
     if (!patch.exceptions || typeof patch.exceptions !== 'object' || Array.isArray(patch.exceptions)) {
       throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный список правил сайтов.');
     }
-    const normalized = {};
+    normalized = {};
+    if (Object.keys(patch.exceptions).length > 100000) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный список правил сайтов.');
     for (const [input, value] of Object.entries(patch.exceptions)) {
       if (value !== true && value !== false) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Правило сайта должно содержать только режим прокси или напрямую.');
       const domain = normalizeKey(input);
@@ -155,16 +161,19 @@ export function replaceDomainRuleLists(raw, patch, options = {}) {
     }
   }
   if (Object.hasOwn(patch, 'whitelist')) {
-    if (!Array.isArray(patch.whitelist)) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный белый список.');
+    if (!Array.isArray(patch.whitelist) || patch.whitelist.length > 100000) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный белый список.');
     const next = new Set(patch.whitelist.map(normalizeKey));
     for (const domain of raw.whitelist || []) if (!next.has(domain)) operations.push({ domain, mode: 'whitelist-remove' });
     for (const domain of next) operations.push({ domain, mode: 'whitelist-add' });
   }
   if (Object.hasOwn(patch, 'pacBypassDomains')) {
-    if (!Array.isArray(patch.pacBypassDomains)) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный список исключений PAC.');
+    if (!Array.isArray(patch.pacBypassDomains) || patch.pacBypassDomains.length > 100000) throw domainMutationError('INVALID_DOMAIN_MUTATION', 'Некорректный список исключений PAC.');
     const next = new Set(patch.pacBypassDomains.map(normalizeKey));
-    for (const domain of raw.pacBypassDomains || []) if (!next.has(domain)) operations.push({ domain, mode: 'pac' });
+    for (const domain of next) if (normalized && Object.hasOwn(normalized, domain)) {
+      throw domainMutationError('INVALID_DOMAIN_MUTATION', 'В списке есть противоречащие друг другу правила сайта.');
+    }
+    for (const domain of raw.pacBypassDomains || []) if (!next.has(domain) && !(normalized && Object.hasOwn(normalized, domain))) operations.push({ domain, mode: 'pac' });
     for (const domain of next) operations.push({ domain, mode: 'pac-bypass' });
   }
-  return applyDomainRuleMutations(raw, operations, options);
+  return applyDeltas(raw, operations, options.catalog || []);
 }

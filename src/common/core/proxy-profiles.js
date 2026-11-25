@@ -1,6 +1,6 @@
 'use strict';
 
-import { parseProxyScheme, proxyEndpointKey } from './utils.js';
+import { getRawProxyEntries, parseProxyScheme, proxyEndpointKey } from './utils.js';
 import { LOCAL_PROXY_SERVICES } from './local-proxy-services.js';
 
 export const BUILTIN_PROXY_IDS = Object.freeze({ tor: 'builtin:tor', warp: 'builtin:warp' });
@@ -9,11 +9,48 @@ export const MAX_PROXY_NAME_LENGTH = 32;
 export const proxyNameLength = name => [...name.normalize('NFKC').trim()].length;
 const EMPTY = Object.freeze({});
 const validatedBindings = new WeakMap();
+const connectionEdits = new WeakMap();
 const folded = name => name.normalize('NFKC').trim().toLocaleLowerCase('en-US');
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
-const rawEntries = raw => String(raw || '').replace(/#.*$/gm, '').split(/[;\r\n]+/).map(s => s.trim()).filter(Boolean);
+const rawEntries = raw => getRawProxyEntries(raw).map(({ text }) => text);
+
+function rewriteRawEntries(raw, rewrite) {
+  let result = '';
+  let cursor = 0;
+  for (const { text, start, end } of getRawProxyEntries(raw)) {
+    const replacement = rewrite(text, end);
+    if (replacement === undefined) continue;
+    result += raw.slice(cursor, start) + replacement.text;
+    cursor = replacement.end ?? end;
+  }
+  return result + raw.slice(cursor);
+}
+
+function normalizeRawConnection(text) {
+  let normalized = text.replace(/^PROXY(?=\s)/i, 'HTTP');
+  if (normalized.includes('#')) {
+    const parsed = parseProxyScheme(normalized);
+    if (parsed?.creds.includes('#')) {
+      // Keep the persisted form compatible with older readers that strip
+      // everything after a hash. Preserve decoding even on legacy invalid %.
+      const end = normalized.lastIndexOf('@');
+      const start = /^(?:HTTP|HTTPS|SOCKS[45]?)\s+/i.exec(normalized)?.[0].length ?? 0;
+      const creds = normalized.slice(start, end);
+      const colon = creds.indexOf(':');
+      const encodeHashes = part => {
+        if (!part.includes('#')) return part;
+        try { decodeURIComponent(part); } catch { part = part.replace(/%/g, '%25'); }
+        return part.replace(/#/g, '%23');
+      };
+      const encoded = colon < 0 ? encodeHashes(creds) :
+        `${encodeHashes(creds.slice(0, colon))}:${encodeHashes(creds.slice(colon + 1))}`;
+      normalized = normalized.slice(0, start) + encoded + normalized.slice(end);
+    }
+  }
+  return normalized === text ? undefined : { text: normalized };
+}
 function connections(raw, strict = true, legacyRaw = '') {
   const entries = rawEntries(raw);
   const legacy = rawEntries(legacyRaw);
@@ -51,10 +88,11 @@ function validName(name, legacy = false) {
 }
 
 export function reconcileProxyProfiles(next, previous = null) {
-  // The existing credential authority parser consumes HTTP, not PAC's PROXY
-  // spelling. Keep a single raw connection source understood by both layers.
+  if (next.ownProxyOrDie != null && typeof next.ownProxyOrDie !== 'boolean') fail('PROXY_INVALID_FAILOVER', 'Invalid own-domain fallback policy.');
+  const edit = connectionEdits.get(next.proxyProfiles);
+  // Keep one connection source readable by the profile, PAC and backup paths.
   if (typeof next.customProxyStringRaw === 'string') {
-    const normalizedRaw = next.customProxyStringRaw.replace(/(^|[;\r\n])(\s*)PROXY(\s+)/gi, '$1$2HTTP$3');
+    const normalizedRaw = rewriteRawEntries(next.customProxyStringRaw, normalizeRawConnection);
     if (normalizedRaw !== next.customProxyStringRaw) next = { ...next, customProxyStringRaw: normalizedRaw };
   }
   const strict = Boolean(previous && next.customProxyStringRaw !== previous.customProxyStringRaw);
@@ -70,14 +108,19 @@ export function reconcileProxyProfiles(next, previous = null) {
   const profiles = [];
   const usedIds = new Set();
   const usedNames = new Set(['tor', 'cloudflare warp', 'warp']);
-  const profileInputs = points.map(point => ({ point,
-    prior: old.find(p => p.endpoint === point.endpoint), candidate: supplied.find(p => p.endpoint === point.endpoint) }));
+  const profileInputs = points.map(point => {
+    const candidate = supplied.find(p => p.endpoint === point.endpoint);
+    return { point, candidate, prior: old.find(p => p.endpoint === point.endpoint) ||
+      (edit && candidate?.id === edit.id && point.endpoint === edit.endpoint ?
+        old.find(p => p.id === edit.id && p.endpoint === edit.previousEndpoint) : undefined) };
+  });
   // Reserve explicit/persisted names before generating any defaults: a new
   // endpoint may precede its existing namesake in an edited raw list.
   const reservedNames = new Set(profileInputs.map(({ candidate, prior }) => candidate?.name ?? prior?.name)
     .filter(name => typeof name === 'string').map(folded));
   for (const { point, prior, candidate } of profileInputs) {
     const id = prior?.id || candidate?.id || `custom:${globalThis.crypto.randomUUID()}`;
+    if (previous && !prior && old.some(p => p.id === id)) fail('PROXY_INVALID_ID', 'An existing proxy ID cannot be moved to another endpoint.');
     if (!/^custom:[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id) || usedIds.has(id)) fail('PROXY_INVALID_ID', 'Invalid or duplicate proxy ID.');
     let name = candidate?.name ?? prior?.name;
     // Hydration is a read, not permission to introduce long names on writes.
@@ -110,6 +153,13 @@ export function reconcileProxyProfiles(next, previous = null) {
   const catalog = getProxyCatalog({ ...next, proxyProfiles });
   const byId = new Map(catalog.map(p => [p.id, p]));
   const signature = catalog.map(p => `${p.id}:${p.enabled}`).join('|');
+  const fallback = next.fallbackProxyId;
+  if (fallback != null && (typeof fallback !== 'string' || !fallback)) fail('PROXY_UNAVAILABLE', 'Select an enabled fallback proxy.');
+  if (previous && fallback != null) {
+    const target = byId.get(fallback);
+    if (fallback !== previous.fallbackProxyId && (!target || !target.enabled)) fail('PROXY_UNAVAILABLE', 'Select an enabled fallback proxy.');
+    if (!target && getProxyCatalog(previous).some(p => p.id === fallback)) fail('PROXY_REPLACEMENT_REQUIRED', 'Select a replacement fallback before deleting its proxy.');
+  }
   for (const list of next.domainLists || []) {
     const prior = previous?.domainLists?.find(item => item.id === list.id);
     const profile = byId.get(list.proxyId);
@@ -175,6 +225,35 @@ export function resolveProxyRoute(mods, ruleKey) {
   return { assigned: true, proxyId: id, chain: chain || 'PROXY 127.0.0.1:1', unavailable: !chain };
 }
 
+export function updateProxyProfile(raw, id, { proxy, name } = {}) {
+  if (Object.values(BUILTIN_PROXY_IDS).includes(id)) fail('PROXY_BUILTIN_READONLY', 'Built-in proxy connections cannot be edited.');
+  const profile = raw.proxyProfiles?.find(p => p.id === id);
+  if (!profile) fail('PROXY_UNKNOWN_ID', 'Unknown proxy.');
+  if (typeof proxy !== 'string' || rawEntries(proxy)[0] !== proxy.trim() || /[;\r\n]/.test(proxy)) fail('PROXY_INVALID_ENDPOINT', 'Enter exactly one proxy endpoint.');
+  proxy = proxy.trim().replace(/^PROXY\s+/i, 'HTTP ');
+  const [point] = connections(proxy);
+  if (!point) fail('PROXY_INVALID_ENDPOINT', 'Invalid proxy endpoint.');
+  if (raw.proxyProfiles.some(p => p.id !== id && p.endpoint === point.endpoint)) fail('PROXY_DUPLICATE_ENDPOINT', 'This proxy endpoint already exists.');
+  name = name === undefined || name === profile.name ? profile.name : validName(name);
+  let matched = false;
+  const customProxyStringRaw = rewriteRawEntries(raw.customProxyStringRaw || '', text => {
+    if (proxyEndpointKey(text) !== profile.endpoint) return;
+    // Collapse duplicate legacy spellings of this one connection on edit,
+    // preserving comments, separators, and every unrelated raw entry.
+    const replacement = matched ? '' : proxy;
+    matched = true;
+    return { text: replacement };
+  });
+  if (!matched) fail('PROXY_INVALID_ENDPOINT', 'The saved connection is unavailable.');
+  const proxyProfiles = name === profile.name && point.endpoint === profile.endpoint ? raw.proxyProfiles :
+    raw.proxyProfiles.map(p => p.id === id ? { ...p, name, endpoint: point.endpoint } : p);
+  const next = { ...raw, customProxyStringRaw, proxyProfiles };
+  // Private capability follows the profile branch through savePacMods' shallow
+  // copies. Raw input and auth are still validated against the real old raw.
+  connectionEdits.set(proxyProfiles, { id, previousEndpoint: profile.endpoint, endpoint: point.endpoint });
+  return reconcileProxyProfiles(next, raw);
+}
+
 export function renameProxyProfile(raw, id, name) {
   if (Object.values(BUILTIN_PROXY_IDS).includes(id)) fail('PROXY_BUILTIN_READONLY', 'Built-in proxies cannot be renamed or deleted.');
   if (!raw.proxyProfiles?.some(p => p.id === id)) fail('PROXY_UNKNOWN_ID', 'Unknown proxy.');
@@ -196,12 +275,21 @@ export function deleteProxyProfile(raw, id, replacementProxyId) {
   const bound = Object.values(bindings).includes(id);
   const listBound = (raw.domainLists || []).some(list => list.proxyId === id);
   const remaining = getProxyCatalog(raw).filter(p => p.id !== id && p.enabled);
-  const needsReplacement = bound || listBound || (raw.defaultProxyId === id && remaining.length > 0);
+  const fallbackBound = raw.fallbackProxyId === id;
+  const needsReplacement = bound || listBound || (remaining.length > 0 && (fallbackBound || raw.defaultProxyId === id));
   if ((needsReplacement || replacementProxyId != null) && !remaining.some(p => p.id === replacementProxyId)) fail('PROXY_REPLACEMENT_REQUIRED', 'Select an enabled replacement proxy before deleting this proxy.');
   const domainProxyIds = bound ? Object.fromEntries(Object.entries(bindings).map(([key, value]) => [key, value === id ? replacementProxyId : value])) : bindings;
   const domainLists = listBound ? raw.domainLists.map(list => list.proxyId === id ? { ...list, proxyId: replacementProxyId } : list) : raw.domainLists;
-  const customProxyStringRaw = rawEntries(raw.customProxyStringRaw).filter(text => connections(text, false)[0]?.endpoint !== profile.endpoint).join('; ');
+  const source = raw.customProxyStringRaw || '';
+  const customProxyStringRaw = rewriteRawEntries(source, (text, end) => {
+    if (proxyEndpointKey(text) !== profile.endpoint) return;
+    // Drop an immediately adjacent inline separator, but not comments or
+    // indentation on another line.
+    if (source[end] === ';') end += source[end + 1] === ' ' ? 2 : 1;
+    return { text: '', end };
+  });
   return reconcileProxyProfiles({ ...raw, customProxyStringRaw,
     proxyProfiles: raw.proxyProfiles.filter(p => p.id !== id), domainProxyIds, ...(domainLists ? { domainLists } : {}),
+    ...(fallbackBound ? { fallbackProxyId: replacementProxyId ?? null } : {}),
     defaultProxyId: raw.defaultProxyId === id ? replacementProxyId || null : raw.defaultProxyId }, raw);
 }

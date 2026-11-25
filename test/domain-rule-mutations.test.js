@@ -1,6 +1,27 @@
 import { expect } from 'chai';
 import { applyDomainRuleMutations, assignDomainProxies, replaceDomainRuleLists } from '../src/common/core/domain-rule-mutations.js';
 
+describe('Raw domain rule replacement', () => {
+  it('accepts a large disjoint replacement without raising the public delta cap', () => {
+    const rules = prefix => Object.fromEntries(Array.from({ length: 50_001 }, (_, i) => [`${prefix}${i}.test`, false]));
+    const replacement = rules('new');
+    const result = replaceDomainRuleLists({ exceptions: rules('old') }, { exceptions: replacement }, { expectedRevision: 0 });
+    expect(Object.keys(result.settings.exceptions)).to.have.length(50_001);
+    expect(result.settings.exceptions).not.to.have.property('old0.test');
+    expect(result.settings.exceptions['new50000.test']).to.equal(false);
+  });
+
+  it('rejects conflicting entries and preserves an explicit rule replacing PAC bypass', () => {
+    const raw = { pacBypassDomains: ['example.test'] };
+    expect(() => replaceDomainRuleLists(raw, { exceptions: { 'example.test': false }, pacBypassDomains: ['EXAMPLE.TEST'] },
+      { expectedRevision: 0 })).to.throw();
+    const result = replaceDomainRuleLists(raw, { exceptions: { 'example.test': false }, pacBypassDomains: [] }, { expectedRevision: 0 });
+    expect(result.settings.exceptions).to.deep.equal({ 'example.test': false });
+    expect(result.settings.pacBypassDomains).to.deep.equal([]);
+    expect(result).to.include({ added: 0, changed: 1 });
+  });
+});
+
 const catalog = [
   { id: 'custom:a', enabled: true }, { id: 'custom:b', enabled: true },
   { id: 'builtin:tor', enabled: false },

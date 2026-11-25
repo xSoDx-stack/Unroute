@@ -17,7 +17,7 @@ import {
   loadProxyHealthCache,
   pruneProxyHealthCache,
   saveProxyHealthResult,
-  drainProxyHealthCache,
+  clearProxyHealthCache,
 } from './proxy-health-cache.js';
 import {
   checkLocalProxyService,
@@ -33,7 +33,9 @@ import { blockInformer } from './block-informer.js';
 import { siteResources } from './site-resources.js';
 import { settingsCoordinator } from './settings-coordinator.js';
 import { applicationState } from './application-state.js';
-import { getProxyCatalog, reconcileProxyProfiles, renameProxyProfile, selectDefaultProxy, deleteProxyProfile } from './proxy-profiles.js';
+import { exportSettingsRpc, importSettingsRpc } from './settings-backup-rpc.js';
+import { isTrustedRpcSender } from './rpc-sender.js';
+import { getProxyCatalog, reconcileProxyProfiles, renameProxyProfile, selectDefaultProxy, deleteProxyProfile, updateProxyProfile } from './proxy-profiles.js';
 import { applyDomainRuleMutations, assignDomainProxies, replaceDomainRuleLists } from './domain-rule-mutations.js';
 import { normalizeDomainRule } from './domain-rules.js';
 import { formatRoutingError } from './routing-errors.js';
@@ -42,6 +44,20 @@ import { saveDomainList, deleteDomainList, reorderDomainLists } from './domain-l
 const FALLBACK_CONNECTION_TEST_URL = PAC_PROVIDERS['Антизапрет'].pacUrls[0];
 let resetting = false;
 let resetGeneration = 0;
+
+async function withSettingsReplacement(operation) {
+  resetting = true;
+  resetGeneration++;
+  try { return await operation(); }
+  finally { resetting = false; }
+}
+
+// Capture at event arrival, then check again after asynchronous preflight.
+export function captureSettingsGeneration() {
+  const generation = resetGeneration;
+  const available = !resetting;
+  return () => available && !resetting && generation === resetGeneration;
+}
 
 export function getConfiguredSiteMatch(host, mods) {
   const match = matchConfiguredRule(host, mods);
@@ -90,6 +106,8 @@ export function serializePacMods(pacMods = {}, includeExceptions = false) {
     proxyProfiles: pacMods.proxyProfiles || [],
     proxyCatalog: getProxyCatalog(pacMods),
     defaultProxyId: pacMods.defaultProxyId ?? null,
+    fallbackProxyId: pacMods.fallbackProxyId ?? null,
+    ownProxyOrDie: pacMods.ownProxyOrDie !== false,
     proxyCatalogRevision: pacMods.proxyCatalogRevision || 0,
     rulesRevision: pacMods.rulesRevision ?? pacMods.revision ?? 0,
   };
@@ -149,29 +167,106 @@ export function createErrorResponse(err) {
   };
 }
 
+// Tab-scoped route changes are deliberately excluded: the target may be
+// private even when an extension-page sender does not carry a tab.
+const OPERATION_CATEGORIES = new Map([
+  ...['SAVE_DOMAIN_LIST', 'DELETE_DOMAIN_LIST', 'REORDER_DOMAIN_LISTS', 'MUTATE_DOMAIN_RULES',
+    'ASSIGN_DOMAIN_PROXIES', 'SET_SINGLE_EXCEPTION', 'IMPORT_EXCEPTIONS_BATCH',
+    'CLEAR_EXCEPTIONS_CATEGORY', 'CLEAR_RULE_HISTORY', 'UNDO_RULE_CHANGE'].map(action => [action, 'rules']),
+  ...['ADD_PROXY', 'RENAME_PROXY_PROFILE', 'UPDATE_PROXY_PROFILE', 'DELETE_PROXY_PROFILE',
+    'SET_DEFAULT_PROXY'].map(action => [action, 'proxy']),
+  ['SAVE_MODS', 'settings'], ['RETRY_SETTINGS_APPLY', 'settings'], ['SET_LOCAL_PROXY_ENABLED', 'settings'],
+  ['IMPORT_SETTINGS', 'backup'], ['EXPORT_SETTINGS', 'backup'],
+]);
+const OPERATION_TITLES = {
+  rules: () => t('logOperationRulesFailed', 'Не удалось изменить правила маршрутизации'),
+  settings: () => t('logOperationSettingsFailed', 'Не удалось применить настройки'),
+  backup: () => t('logOperationBackupFailed', 'Не удалось выполнить операцию с резервной копией'),
+  proxy: () => t('logOperationProxyFailed', 'Не удалось изменить профиль прокси'),
+};
+const BACKUP_FAILURE_CODES = new Set([
+  'BACKUP_EXPORT_FAILED', 'BACKUP_IMPORT_FAILED', 'BACKUP_STORAGE_FAILED', 'BACKUP_ROLLBACK_FAILED',
+]);
+
+function logOperationalFailure(category, action, code) {
+  // No request data or Error objects cross this boundary. No await: diagnostics
+  // must not affect RPC completion, even if the logger rejects.
+  try {
+    void Promise.resolve(logger.add({ level: 'error', category, title: OPERATION_TITLES[category](),
+      message: code, details: { action }, groupKey: action })).catch(() => {});
+  } catch { /* Diagnostics are best effort. */ }
+}
+
+function isKnownApplyOutcome(error) {
+  // The coordinator flattens errors to messages. Compare locally, never log
+  // them. pacSync.lastError is the error already reported by PAC sync.
+  const pacError = pacSync.lastError;
+  const message = error?.message ?? error;
+  return (pacError && (error === pacError || error === (pacError.message || String(pacError)))) ||
+    error?.name === 'SyncSupersededError' ||
+    message === t('msg_the_pac_update_was_cancelled_by_a_newer_setti_087c54d3', 'Запрос обновления PAC отменён более новым изменением настроек') ||
+    message === t('msg_applying_settings_is_waiting_for_another_atte_286026df', 'Применение настроек ожидает повторной попытки') ||
+    message === t('msg_proxy_settings_are_controlled_by_another_exte_41004226', 'Настройки прокси контролируются другим расширением или политикой браузера.') ||
+    message === t('msg_settings_are_being_reset_3089ff9b', 'Выполняется сброс настроек') ||
+    message === t('msg_settings_are_being_reset_try_changing_this_ag_31c856be', 'Выполняется сброс настроек. Повторите изменение после завершения.');
+}
+
 export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
   if (chrome.runtime.onMessage.hasListeners && chrome.runtime.onMessage.hasListeners()) {
     return;
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (sender && sender.id && chrome.runtime?.id && sender.id !== chrome.runtime.id) {
-      return false;
-    }
-    if (sender && sender.url && !sender.url.startsWith(chrome.runtime.getURL(''))) {
-      return false;
-    }
+    if (!isTrustedRpcSender(sender, chrome.runtime)) return false;
 
     if (!message || !message.action) {
       return false;
     }
 
+    const action = message.action;
+    const generation = resetGeneration;
+    let ownGeneration = generation;
+    const category = OPERATION_CATEGORIES.get(action);
+    // In spanning mode a popup can act on a private tab without sender.tab.
+    const canLog = category && !resetting && !sender.incognito && !sender.tab?.incognito &&
+      !chrome.extension?.inIncognitoContext && !/\/pages\/(?:popup|firefox-private-browsing)\//.test(sender.url) &&
+      !Object.hasOwn(message, 'currentTabId');
+    let skipFailure = false;
+    let application;
+    const applySettings = async () => {
+      application = await settingsCoordinator.apply();
+      return application;
+    };
+    const reportFailure = (response, error) => {
+      if (!canLog || resetting || resetGeneration !== ownGeneration || skipFailure) return;
+      try {
+        if (response.success) {
+          if (application?.pending && application.error && !isKnownApplyOutcome(application.error)) {
+            logOperationalFailure('settings', action, 'SETTINGS_APPLY_FAILED');
+          }
+          return;
+        }
+        const code = response.errorCode;
+        if (code === 'BACKUP_INVALID' || code === 'PROXY_NOT_CONTROLLABLE' ||
+            formatRoutingError(code) || isKnownApplyOutcome(error)) return;
+        if (action === 'UNDO_RULE_CHANGE' && (error?.message === t('msg_no_changes_to_undo_0934f336', 'Нет изменений для отмены') ||
+            error?.message === t('msg_this_change_is_too_large_to_undo_safely_use_i_e1b5ff7c', 'Изменение слишком велико для безопасной отмены. Используйте импорт или редактор списков.'))) return;
+        logOperationalFailure(category, action, category === 'backup' && BACKUP_FAILURE_CODES.has(code) ? code : 'OPERATION_FAILED');
+      } catch { /* Classification is best effort too. */ }
+    };
+
     const handleMessage = async () => {
-      const generation = resetGeneration;
       const ensureCurrent = () => {
         if (generation !== resetGeneration) throw new Error(t("msg_the_operation_was_cancelled_by_a_settings_res_5072fc6c", "Операция отменена из-за сброса настроек"));
       };
       if (resetting) throw new Error(t("msg_settings_are_being_reset_please_wait_4d08e3d1", "Выполняется сброс настроек. Дождитесь завершения."));
+      if (message.action === 'IMPORT_SETTINGS') {
+        return importSettingsRpc(message.backup, operation => {
+          ensureCurrent();
+          ownGeneration = resetGeneration + 1;
+          return withSettingsReplacement(operation);
+        });
+      }
       if (message.action !== 'RESET_SETTINGS') await appState.ensureLocalStateInitialized();
       ensureCurrent();
       if (resetting) throw new Error(t("msg_settings_are_being_reset_please_wait_4d08e3d1", "Выполняется сброс настроек. Дождитесь завершения."));
@@ -251,7 +346,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
         case 'DELETE_DOMAIN_LIST':
         case 'REORDER_DOMAIN_LISTS': {
           let listId = message.listId;
-          await pacKitchen.updatePacMods(current => {
+          const committed = await pacKitchen.updatePacMods(current => {
             ensureCurrent();
             let next;
             if (message.action === 'SAVE_DOMAIN_LIST') {
@@ -261,10 +356,11 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             else next = reorderDomainLists(current, message);
             return next;
           }, { source: 'manual', copyOnWrite: true });
-          await settingsCoordinator.apply();
+          await applySettings();
           const latest = await pacKitchen.getRawPacMods();
           return { success: true, data: { revision: latest._rulesRevision ?? latest._revision ?? 0,
             rulesRevision: latest._rulesRevision ?? latest._revision ?? 0,
+            committedRevision: committed?.rulesRevision,
             listId: listId ?? null,
             ...(message.action === 'SAVE_DOMAIN_LIST' ? { list: latest.domainLists.find(item => item.id === listId) || null } : {}),
             lists: (latest.domainLists || []).map(({ id, name, proxyId, enabled, domains }) =>
@@ -308,7 +404,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             else context.touchedDomains = mutation.touchedExceptionDomains;
             return mutation.settings;
           }, context);
-          await settingsCoordinator.apply();
+          await applySettings();
           return { success: true, data: { rulesRevision: parsed.rulesRevision,
             added: mutation.added, changed: mutation.changed, unchanged: mutation.unchanged,
             exceptionStats: pacKitchen.getCachedStats() } };
@@ -348,36 +444,36 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
           const domain = typeof message.domain === 'string'
             ? message.domain.trim().toLowerCase()
             : '';
-          if (!domain) throw new Error(t("msg_no_domain_was_provided_for_the_site_rule_cb6d5c38", "Не указан домен для правила сайта"));
+          if (!domain) {
+            skipFailure = true;
+            throw new Error(t("msg_no_domain_was_provided_for_the_site_rule_cb6d5c38", "Не указан домен для правила сайта"));
+          }
 
-          let updatedExceptions = {};
           let removedRuleKeys = [];
-          await pacKitchen.updatePacMods((current) => {
-            let exceptions = Object.assign({}, current.exceptions || {});
+          const parsed = await pacKitchen.updatePacMods((current) => {
+            ensureCurrent();
             if (message.isProxy === null || message.isProxy === undefined) {
-              const resetResult = removeMatchingExceptionRules(domain, exceptions);
-              exceptions = resetResult.exceptions;
+              const resetResult = removeMatchingExceptionRules(domain, current.exceptions);
               removedRuleKeys = resetResult.removedRuleKeys;
-            } else {
-              const catalog = getProxyCatalog(current);
-              const defaultId = catalog.some(profile => profile.enabled && profile.id === current.defaultProxyId)
-                ? current.defaultProxyId : undefined;
-              const operation = { domain, mode: message.isProxy ? 'proxy' : 'direct' };
-              if (message.isProxy && (message.proxyId !== undefined || current.exceptions?.[domain] !== true)) {
-                operation.proxyId = message.proxyId ?? defaultId;
-              }
-              const result = applyDomainRuleMutations(current, [operation], { catalog });
-              updatedExceptions = result.settings.exceptions;
-              return result.settings;
+              // Reconciliation drops bindings whose manual proxy rules were removed.
+              return { ...current, exceptions: resetResult.exceptions };
             }
-            updatedExceptions = exceptions;
-            return Object.assign({}, current, { exceptions });
+            const catalog = getProxyCatalog(current);
+            const defaultId = catalog.some(profile => profile.enabled && profile.id === current.defaultProxyId)
+              ? current.defaultProxyId : undefined;
+            const operation = { domain, mode: message.isProxy ? 'proxy' : 'direct' };
+            if (message.isProxy && (message.proxyId !== undefined || current.exceptions?.[domain] !== true)) {
+              operation.proxyId = message.proxyId ?? defaultId;
+            }
+            return applyDomainRuleMutations(current, [operation], { catalog }).settings;
           }, { source: 'manual', touchedDomains: [domain], copyOnWrite: true });
-          await settingsCoordinator.apply();
+          ensureCurrent();
+          await applySettings();
+          ensureCurrent();
           const currentTabId = getRequestedCurrentTabId(message);
           if (currentTabId !== null) blockInformer.clearTab(currentTabId);
           const exceptionStats = pacKitchen.getCachedStats();
-          const currentSiteMatch = matchExceptionDomain(domain, updatedExceptions);
+          const currentSiteMatch = getConfiguredSiteMatch(domain, parsed);
           return {
             success: true,
             data: { exceptionStats, currentSiteMatch, removedRuleKeys },
@@ -388,7 +484,10 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
           const domains = message.domains || [];
           const target = message.target || 'excluded';
           const mode = { included: 'proxy', excluded: 'direct', whitelist: 'whitelist-add' }[target];
-          if (!mode || !Array.isArray(domains)) throw new Error(t('msg_invalid_domain_import', 'Invalid domain import.'));
+          if (!mode || !Array.isArray(domains)) {
+            skipFailure = true;
+            throw new Error(t('msg_invalid_domain_import', 'Invalid domain import.'));
+          }
           let mutation;
           await pacKitchen.updatePacMods((current) => {
             ensureCurrent();
@@ -405,7 +504,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
               catalog: getProxyCatalog(current), expectedRevision: message.expectedRevision });
             return mutation.settings;
           }, { source: 'import', copyOnWrite: true });
-          await settingsCoordinator.apply();
+          await applySettings();
           const exceptionStats = pacKitchen.getCachedStats();
           const latest = await pacKitchen.getPacMods();
           return { success: true, data: { count: mutation.added + mutation.changed,
@@ -434,7 +533,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             }
             return Object.assign({}, current, { exceptions, whitelist });
           }, { copyOnWrite: true });
-          await settingsCoordinator.apply();
+          await applySettings();
           const exceptionStats = pacKitchen.getCachedStats();
           return { success: true, data: { exceptionStats } };
         }
@@ -460,8 +559,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
         }
 
         case 'CLEAR_PAC': {
-          await pacSync.clearPac();
-          await applicationState.applied((await pacKitchen.getRawPacMods())._revision || 0);
+          await settingsCoordinator.clearPac(ensureCurrent);
           return { success: true, data: pacSync.getState() };
         }
 
@@ -477,23 +575,54 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             proxyCatalog: getProxyCatalog(parsed), defaultProxyId: parsed.defaultProxyId } };
         }
 
+        case 'UPDATE_PROXY_PROFILE': {
+          const parsed = await pacKitchen.updatePacMods(current => {
+            ensureCurrent();
+            return updateProxyProfile(current, message.proxyId, { proxy: message.proxy, name: message.name });
+          }, { source: 'manual', copyOnWrite: true });
+          await applySettings();
+          ensureCurrent();
+          await pruneProxyHealthCache(async () => utils.parseCustomProxies(
+            (await pacKitchen.getRawPacMods()).customProxyStringRaw || '').map(proxy => proxy.raw)).catch(() => {});
+          return { success: true, data: { pacMods: serializePacMods(parsed), proxyCatalog: getProxyCatalog(parsed) } };
+        }
+
         case 'DELETE_PROXY_PROFILE': {
           const parsed = await pacKitchen.updatePacMods(current => {
             ensureCurrent();
             return deleteProxyProfile(current, message.proxyId, message.replacementProxyId);
           }, { source: 'manual', copyOnWrite: true });
-          await settingsCoordinator.apply();
+          await applySettings();
+          ensureCurrent();
+          await pruneProxyHealthCache(async () => utils.parseCustomProxies(
+            (await pacKitchen.getRawPacMods()).customProxyStringRaw || '').map(proxy => proxy.raw)).catch(() => {});
           return { success: true, data: { pacMods: serializePacMods(parsed), proxyCatalog: getProxyCatalog(parsed) } };
         }
 
         case 'SAVE_MODS': {
-          const patch = message.mods || {};
+          const patch = message.mods ?? {};
+          const configs = getDefaultConfigs();
+          const invalidPatch = () => {
+            skipFailure = true;
+            return new Error(t('msg_use_dedicated_proxy_domain_operations', 'Use the dedicated proxy and domain operations.'));
+          };
+          if (typeof patch !== 'object' || Array.isArray(patch)) throw invalidPatch();
+          for (const [key, value] of Object.entries(patch)) {
+            if (key === 'pacBypassDomains' || key === 'exceptions' || key === 'whitelist') continue; // Validated atomically by replaceDomainRuleLists.
+            if (!Object.hasOwn(configs, key)) throw invalidPatch();
+            if (key === 'fallbackProxyId') {
+              if (value !== null && typeof value !== 'string') throw invalidPatch();
+            } else if (key === 'ownProxyOrDie') {
+              if (value !== null && typeof value !== 'boolean') throw invalidPatch();
+            } else if (typeof value !== typeof configs[key].dflt) throw invalidPatch();
+          }
           const parsedMods = await pacKitchen.updatePacMods((current) => {
             ensureCurrent();
-            for (const key of ['proxyProfiles', 'domainProxyIds', 'defaultProxyId', '_proxyCatalogRevision', 'siteResourceInheritance', 'domainLists']) {
-              if (Object.hasOwn(patch, key)) throw new Error(t('msg_use_dedicated_proxy_domain_operations', 'Use the dedicated proxy and domain operations.'));
-            }
-            let next = reconcileProxyProfiles({ ...current, ...patch }, current);
+            let next = reconcileProxyProfiles({
+              ...current,
+              ...patch,
+              ...(patch.ownProxyOrDie === null ? { ownProxyOrDie: true } : {}),
+            }, current);
             if (Object.hasOwn(patch, 'exceptions') || Object.hasOwn(patch, 'whitelist') || Object.hasOwn(patch, 'pacBypassDomains')) {
               const replacement = replaceDomainRuleLists(current, patch, { expectedRevision: message.expectedRevision,
                 proxyId: message.proxyId, catalog: getProxyCatalog(next) }).settings;
@@ -507,7 +636,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             source: message.ruleSource === 'import' ? 'import' : 'manual',
             touchedDomains: Array.isArray(message.touchedDomains) ? message.touchedDomains.filter(domain =>
               typeof domain === 'string' && Object.hasOwn(patch.exceptions || {}, domain)).slice(0, 100000) : [] });
-          await settingsCoordinator.apply();
+          await applySettings();
 
           if (Object.prototype.hasOwnProperty.call(message.mods || {}, 'customProxyStringRaw')) {
             ensureCurrent();
@@ -523,11 +652,15 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
 
         case 'ADD_PROXY': {
           const proxy = utils.parseProxyScheme(message.proxy);
-          if (!proxy) throw new Error(t("msg_check_the_proxy_address_and_port_1_65535_12481406", "Проверьте адрес прокси и номер порта (1–65535)"));
+          if (!proxy) {
+            skipFailure = true;
+            throw new Error(t("msg_check_the_proxy_address_and_port_1_65535_12481406", "Проверьте адрес прокси и номер порта (1–65535)"));
+          }
           const append = current => {
             ensureCurrent();
             const proxies = utils.parseCustomProxies(current.customProxyStringRaw || '');
             if (proxies.some(item => item.type === proxy.type && item.address === proxy.address)) {
+              skipFailure = true;
               throw new Error(t("msg_this_proxy_is_already_in_the_list_84e5bfa6", "Такой прокси уже добавлен в список"));
             }
             let next = reconcileProxyProfiles({ ...current,
@@ -540,9 +673,12 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             return next;
           };
           append(await pacKitchen.getRawPacMods());
+          // The probe already reports health/restoration failures.
+          skipFailure = true;
           const health = await checkHealth(proxy.raw);
           ensureCurrent();
           if (!health.ok) return { success: false, error: health.error, data: { health } };
+          skipFailure = false;
           // Merge into the latest list inside its mutation queue, after the
           // potentially slow check. Other views may have edited it meanwhile.
           const parsedMods = await pacKitchen.updatePacMods(append, { preferencesOnly: true });
@@ -553,7 +689,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             return null;
           });
           ensureCurrent();
-          await settingsCoordinator.apply();
+          await applySettings();
           ensureCurrent();
           return { success: true, data: { pacMods: serializePacMods(parsedMods), proxy: proxy.raw,
             health: { ...health, checkedAt: cached?.checkedAt || checkedAt } } };
@@ -575,7 +711,9 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
         }
 
         case 'SET_LOCAL_PROXY_ENABLED': {
+          skipFailure = true;
           const service = getLocalProxyService(message.service);
+          skipFailure = false;
           const enabled = Boolean(message.enabled);
           let health = null;
 
@@ -583,6 +721,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             health = await checkLocalProxyService(message.service, proxy => { ensureCurrent(); return checkHealth(proxy); });
             ensureCurrent();
             if (!health.ok) {
+              skipFailure = true;
               return { success: false, error: health.error, data: { health } };
             }
           }
@@ -590,7 +729,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
           const parsedMods = await pacKitchen.updatePacMods((current) => {
             return Object.assign({}, current, { [service.modKey]: enabled });
           }, { preferencesOnly: true });
-          await settingsCoordinator.apply();
+          await applySettings();
 
           return {
             success: true,
@@ -622,7 +761,7 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
         case 'UNDO_RULE_CHANGE':
           return { success: true, data: await settingsCoordinator.undo(message.id || null) };
         case 'RETRY_SETTINGS_APPLY':
-          return { success: true, data: await settingsCoordinator.apply() };
+          return { success: true, data: await applySettings() };
 
         case 'SET_RAW_PAC': {
           // Restricted to trusted extension pages by the sender-origin guard
@@ -665,8 +804,8 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
         }
 
         case 'EXPORT_LOGS': {
-          const text = logger.exportText(message.category || 'all', message.search || '');
-          return { success: true, data: { text } };
+          const { text, count } = logger.exportReport({ category: message.category, search: message.search, level: message.level });
+          return { success: true, data: { text, count } };
         }
 
         case 'LOG_CLIENT_EVENT': {
@@ -696,6 +835,9 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
           }
         }
 
+        case 'EXPORT_SETTINGS':
+          return exportSettingsRpc(ensureCurrent);
+
         case 'RESET_SETTINGS': {
           resetting = true;
           resetGeneration++;
@@ -706,10 +848,13 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
             await pacKitchen.beginReset();
             await drain;
             await appState.settlePendingInitialization();
+            // Aborting only stops downloads; native/backup writes already in
+            // flight must settle before reset starts replacing state.
+            await pacSync.drainPendingSync();
             await siteResources.clear();
             pacSync.resetRuntimeState();
             await applicationState.reset();
-            await drainProxyHealthCache();
+            await clearProxyHealthCache().catch(() => {});
             await withAppearanceWriteLock(async () => {
               await storage.clear();
               // clear() emits no appearance event before the first saved choice.
@@ -747,13 +892,17 @@ export function setupMessageBus({ checkHealth = checkProxyHealth } = {}) {
 
     handleMessage()
       .then(async (res) => {
-        if (res.success) res.settingsState = await settingsCoordinator.state();
+        if (res.success && !Object.hasOwn(res, 'settingsState')) {
+          // Status readback must not turn a committed operation into a failure.
+          try { res.settingsState = await settingsCoordinator.state(); } catch { /* optional metadata */ }
+        }
         sendResponse(res);
+        reportFailure(res);
       })
       .catch((err) => {
         const response = createErrorResponse(err);
-        console.warn(`[Message Bus] Handled error for action "${message.action}":`, response.error);
         sendResponse(response);
+        reportFailure(response, err);
       });
 
     return true; // Keep message port open for async response

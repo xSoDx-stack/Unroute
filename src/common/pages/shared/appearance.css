@@ -20,7 +20,12 @@
 .appearance-settings :is(select, input, button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .appearance-settings :is(select, input, button):disabled { opacity: .55; cursor: not-allowed; }
 .appearance-presets { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.appearance-preset { min-height: 32px; padding: 5px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; transition: var(--transition); }
+.appearance-preset { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; transition: var(--transition); }
+.appearance-preset::before { content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box; border: 1px solid #00000029; }
+.appearance-preset[data-accent="mint"]::before { background: #78c6b0; }
+.appearance-preset[data-accent="blue"]::before { background: #82b3dd; }
+.appearance-preset[data-accent="sage"]::before { background: #a3bc9e; }
+.appearance-preset[data-accent="custom"]::before { background: var(--custom-swatch, var(--accent-primary)); }
 .appearance-preset[aria-pressed="true"] { border-color: var(--accent-text); background: var(--accent-soft); color: var(--accent-text); }
 .appearance-preset:hover { background: var(--bg-surface-hover); }
 .appearance-preset:active { background: var(--bg-surface-active); }

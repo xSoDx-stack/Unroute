@@ -1,8 +1,9 @@
 'use strict';
 
 import { expect } from 'chai';
+import assert from 'node:assert/strict';
 import { proxyBackend as chromiumBackend } from '../src/common/core/proxy-backend.js';
-import { proxyBackend as firefoxBackend } from '../src/firefox/core/proxy-backend.js';
+import { proxyBackend as firefoxBackend } from './firefox-proxy-backend-fixture.js';
 
 describe('Cross-browser proxy backend contract', () => {
   let originalChrome;
@@ -190,5 +191,53 @@ describe('Cross-browser proxy backend contract', () => {
     expect(firefoxBackend.addErrorListener(listener)).to.equal(true);
     expect(chromiumListener).to.equal(listener);
     expect(firefoxListener).to.equal(listener);
+  });
+
+  for (const backend of [chromiumBackend, firefoxBackend]) {
+    it(`${backend.platform} reads callback-scoped lastError with the native settings receiver`, async () => {
+      const settings = chrome.proxy.settings;
+      settings.get = function (details, callback) {
+        assert.equal(this, settings);
+        assert.deepEqual(details, {});
+        chrome.runtime.lastError = { message: 'Native read failed' };
+        try {
+          callback({ value: 'ignored' });
+        } finally {
+          delete chrome.runtime.lastError;
+        }
+      };
+      await assert.rejects(backend.getSettings(), { message: 'Native read failed' });
+    });
+
+    it(`${backend.platform} uses the platform-specific unsupported settings message`, async () => {
+      chrome.i18n = { getMessage: (key, args) => `${key}: ${args.join(', ')}` };
+      delete chrome.proxy.settings.get;
+      const key = backend.platform === 'firefox' ? 'firefoxUnsupportedProxySetting' :
+        'msg_the_browser_does_not_support_proxy_settings_s_c3082d3d';
+      await assert.rejects(backend.getSettings(), { message: `${key}: get` });
+    });
+  }
+
+  it('offers a shared listener helper that preserves receivers and avoids duplicate registration', async () => {
+    const { addBrowserListener } = await import('../src/common/core/browser-api.js');
+    const listener = () => {};
+    const listeners = new Set();
+    const event = {
+      addListener(fn) {
+        assert.equal(this, event);
+        assert.equal(listeners.has(fn), false);
+        listeners.add(fn);
+      },
+      hasListener(fn) {
+        assert.equal(this, event);
+        return listeners.has(fn);
+      },
+    };
+    assert.equal(addBrowserListener(undefined, listener), false);
+    assert.equal(addBrowserListener({ hasListener: () => true }, listener), false);
+    assert.equal(addBrowserListener(event, listener), true);
+    assert.equal(addBrowserListener(event, listener), true);
+    assert.equal(addBrowserListener({ addListener: fn => assert.equal(fn, listener) }, listener), true);
+    assert.deepEqual([...listeners], [listener]);
   });
 });

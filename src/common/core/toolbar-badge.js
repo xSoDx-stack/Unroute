@@ -59,52 +59,94 @@ export class ToolbarBadge {
     this.readState = readState;
     this.presentations = new Map();
     this.timer = null;
-    this.dirty = false;
+    this.refreshAll = false;
+    this.pendingTabs = new Set();
+    this.removedTabs = new Set();
     this.running = false;
     this.registered = false;
   }
 
   schedule() {
-    this.dirty = true;
+    this.refreshAll = true;
+    this.armTimer();
+  }
+
+  scheduleTab(id) {
+    if (!Number.isInteger(id) || id < 0) return;
+    this.pendingTabs.add(id);
+    this.armTimer();
+  }
+
+  armTimer() {
     if (this.timer !== null || this.running) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.refresh().catch(error => console.warn('[Toolbar badge]', error.message));
+      this.drain().catch(error => console.warn('[Toolbar badge]', error.message));
     }, 50);
   }
 
   async refresh() {
-    if (this.running) { this.dirty = true; return; }
+    this.refreshAll = true;
+    await this.drain();
+  }
+
+  async drain() {
+    if (this.running) return;
     this.running = true;
     try {
-      do {
-        this.dirty = false;
+      while (this.refreshAll || this.pendingTabs.size) {
+        const all = this.refreshAll;
+        const ids = this.pendingTabs;
+        this.refreshAll = false;
+        this.pendingTabs = new Set();
+        this.removedTabs.clear();
         const state = await this.readState();
-        const tabs = await callApi(chrome.tabs, 'query', {});
-        if (this.dirty) continue;
-        const openIds = new Set((tabs || []).map(tab => tab.id));
-        for (const id of this.presentations.keys()) {
-          if (!openIds.has(id)) this.presentations.delete(id);
-        }
-        await Promise.all((tabs || []).map(async tab => {
-          if (!Number.isInteger(tab.id) || tab.id < 0) return;
-          const presentation = badgePresentation(tab.pendingUrl || tab.url, state);
-          const signature = JSON.stringify(presentation);
-          if (this.presentations.get(tab.id) === signature) return;
-          try {
-            await Promise.all([
-              callApi(chrome.action, 'setBadgeText', { tabId: tab.id, text: presentation.text }),
-              callApi(chrome.action, 'setBadgeBackgroundColor', { tabId: tab.id, color: presentation.color }),
-              callApi(chrome.action, 'setBadgeTextColor', { tabId: tab.id, color: '#ffffff' }),
-              callApi(chrome.action, 'setTitle', { tabId: tab.id, title: presentation.title }),
-            ]);
-            if (!this.dirty) this.presentations.set(tab.id, signature);
-          } catch {
-            this.presentations.delete(tab.id);
+        if (this.refreshAll) continue;
+        if (all) {
+          const tabs = await callApi(chrome.tabs, 'query', {}) || [];
+          if (this.refreshAll) continue;
+          const openIds = new Set(tabs.map(tab => tab.id));
+          for (const id of this.presentations.keys()) {
+            if (!openIds.has(id)) this.presentations.delete(id);
           }
-        }));
-      } while (this.dirty);
-    } finally { this.running = false; }
+          await Promise.all(tabs.map(tab => this.updateTab(tab, state)));
+        } else {
+          await Promise.all([...ids].map(async id => {
+            if (this.isStale(id)) return;
+            // A tab can close between an event and tabs.get().
+            const tab = await callApi(chrome.tabs, 'get', id).catch(() => undefined);
+            if (tab) await this.updateTab(tab, state);
+          }));
+        }
+      }
+    } finally {
+      this.running = false;
+      this.removedTabs.clear();
+      if (this.refreshAll || this.pendingTabs.size) this.armTimer();
+    }
+  }
+
+  isStale(id) {
+    return this.refreshAll || this.pendingTabs.has(id) || this.removedTabs.has(id);
+  }
+
+  async updateTab(tab, state) {
+    const id = tab.id;
+    if (!Number.isInteger(id) || id < 0 || this.isStale(id)) return;
+    const presentation = badgePresentation(tab.pendingUrl || tab.url, state);
+    const signature = JSON.stringify(presentation);
+    if (this.presentations.get(id) === signature) return;
+    // A partial or superseded write must not leave an older signature cached.
+    this.presentations.delete(id);
+    const results = await Promise.allSettled([
+      callApi(chrome.action, 'setBadgeText', { tabId: id, text: presentation.text }),
+      callApi(chrome.action, 'setBadgeBackgroundColor', { tabId: id, color: presentation.color }),
+      callApi(chrome.action, 'setBadgeTextColor', { tabId: id, color: '#ffffff' }),
+      callApi(chrome.action, 'setTitle', { tabId: id, title: presentation.title }),
+    ]);
+    if (!this.isStale(id) && results.every(result => result.status === 'fulfilled')) {
+      this.presentations.set(id, signature);
+    }
   }
 
   setup() {
@@ -114,12 +156,16 @@ export class ToolbarBadge {
       if (change.url || change.status === 'loading' || change.status === 'complete') {
         // Browsers reset tab-specific action properties on navigation.
         this.presentations.delete(id);
-        this.schedule();
+        this.scheduleTab(id);
       }
     });
-    chrome.tabs.onActivated.addListener(() => this.schedule());
-    chrome.tabs.onCreated.addListener(() => this.schedule());
-    chrome.tabs.onRemoved.addListener(id => this.presentations.delete(id));
+    chrome.tabs.onActivated.addListener(({ tabId }) => this.scheduleTab(tabId));
+    chrome.tabs.onCreated.addListener(tab => this.scheduleTab(tab.id));
+    chrome.tabs.onRemoved.addListener(id => {
+      this.presentations.delete(id);
+      this.pendingTabs.delete(id);
+      if (this.running) this.removedTabs.add(id);
+    });
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && (changes['pac-kitchen-mods'] || changes['settings-application'] ||
           changes.antiCensorRu || changes['handlers-state'])) this.schedule();

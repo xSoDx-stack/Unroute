@@ -3,11 +3,12 @@
 import { t } from './i18n.js';
 
 import { utils } from './utils.js';
-import { registerTemporaryCredentials, unregisterTemporaryCredentials } from './proxy-auth.js';
+import { observeProxyProbeAuth, registerTemporaryCredentials, unregisterTemporaryCredentials } from './proxy-auth.js';
 import { logger } from './logger.js';
 import { pacSync } from './pac-sync.js';
 import { pacKitchen } from './pac-kitchen.js';
 import { cookPac } from './pac-script.js';
+import { describeHealthCheckTarget } from './proxy-diagnostics.js';
 import {
   assertProxySettingsControllable,
   withProxySettingsLock,
@@ -93,7 +94,12 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
   }
 
   // Safe sanitized proxy metadata for diagnostic logging (NEVER logs credentials)
+  const cachedMods = pacKitchen.getCachedMods();
+  const initialTarget = describeHealthCheckTarget(parsed, cachedMods);
+  const probeGroupKey = `probe|${(parsed.type || 'PROXY').toUpperCase()}|${String(parsed.hostname).toLowerCase()}:${parsed.port}`;
   const proxyMeta = {
+    ...(initialTarget.name ? { name: initialTarget.name } : {}),
+    ...(initialTarget.label ? { proxy: initialTarget.label } : {}),
     scheme: parsed.type || 'unknown',
     host: parsed.hostname || 'unknown',
     port: parsed.port || 'unknown',
@@ -103,7 +109,8 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
   const rawType = parsed.type.toUpperCase();
   if (parsed.hasAuth && rawType.startsWith('SOCKS')) {
     const msg = t("msg_browser_proxy_apis_do_not_support_socks4_sock_18db49ba", "Прокси-API браузера не поддерживает авторизацию по логину и паролю для SOCKS4/SOCKS5 — ни в Chromium, ни в Firefox");
-    logger.warn('auth', t("msg_unsupported_socks_authentication_ccd8cae5", "Неподдерживаемая авторизация SOCKS"), msg, proxyMeta);
+    const targetSuffix = initialTarget.label ? ` — ${initialTarget.label}` : '';
+    logger.warn('auth', `${t("msg_unsupported_socks_authentication_ccd8cae5", "Неподдерживаемая авторизация SOCKS")}${targetSuffix}`, msg, proxyMeta, probeGroupKey);
     return { ok: false, error: msg };
   }
 
@@ -116,7 +123,7 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
     pacKeyword = 'PROXY';
   } else if (rawType === 'SOCKS4') {
     pacKeyword = 'SOCKS';
-  } else if (rawType === 'SOCKS5' || rawType === 'SOCKS') {
+  } else if (rawType === 'SOCKS') {
     isSocks = true;
   } else {
     pacKeyword = rawType; // HTTPS or other
@@ -148,9 +155,13 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
   const testPac = generateHealthCheckPac(basePacScript, testProxyScheme);
 
   const activeMods = await pacKitchen.getPacMods();
-  const startTime = Date.now();
+  const resolvedTarget = describeHealthCheckTarget(parsed, activeMods);
+  if (resolvedTarget.name) proxyMeta.name = resolvedTarget.name;
+  if (resolvedTarget.label) proxyMeta.proxy = resolvedTarget.label;
+  const targetSuffix = resolvedTarget.label ? ` — ${resolvedTarget.label}` : '';
   let result = null;
   let restorationError = null;
+  let attemptedApply = false;
   const previousDetails = await assertProxySettingsControllable();
   ensureCurrent();
   const snapshot = previousDetails.backendSnapshot;
@@ -173,6 +184,7 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
     // Apply layered test proxy configuration
     await assertProxySettingsControllable();
     ensureCurrent();
+    attemptedApply = true;
     await proxyBackend.applyPac(testPac, {
       mandatory: activeMods.ifProxyOrDie !== false,
     });
@@ -180,59 +192,66 @@ async function executeSingleProxyHealthCheck(proxyString, ensureCurrent) {
 
     // Execute probe fetch with timeout
     const timeoutMs = 5000;
+    const probeUrl = `https://1.1.1.1/cdn-cgi/trace?_probe=${crypto.randomUUID()}`;
+    const probeAuth = observeProxyProbeAuth(probeUrl, parsed.hostname, parsed.port);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const probeUrl = `https://1.1.1.1/cdn-cgi/trace?_probe=${Date.now()}`;
+      const startTime = performance.now();
       const res = await fetch(probeUrl, {
         cache: 'no-store',
+        redirect: 'manual',
         signal: controller.signal,
       });
 
-      clearTimeout(timer);
+      const latency = Math.round(performance.now() - startTime);
+      try { res?.body?.cancel?.()?.catch(() => {}); } catch { /* already closed */ }
       ensureCurrent();
 
       if (res && (res.status === 200 || res.status === 204)) {
-        const latency = Date.now() - startTime;
         result = { ok: true, latency };
       } else if (res && res.status === 407) {
         const msg = t("msg_proxy_authentication_failed_407_proxy_authent_369d0eb4", "Ошибка авторизации (407 Proxy Authentication Required): неверный логин или пароль");
-        logger.warn('auth', t("msg_proxy_authentication_failed_407_f81ecb68", "Ошибка авторизации прокси (407)"), msg, proxyMeta);
+        logger.warn('auth', `${t("msg_proxy_authentication_failed_407_f81ecb68", "Ошибка авторизации прокси (407)")}${targetSuffix}`, msg, proxyMeta, probeGroupKey);
         result = { ok: false, error: msg };
       } else {
         const msg = t("msg_the_server_returned_http_status_sub_e243638d", "Сервер вернул статус HTTP $1", [res ? res.status : t("msg_no_response_6947861c", "нет ответа")]);
-        logger.warn('proxy', t("msg_the_proxy_returned_an_invalid_status_c76b5be9", "Прокси вернул некорректный статус"), msg, { ...proxyMeta, status: res ? res.status : null });
+        logger.warn('proxy', `${t("msg_the_proxy_returned_an_invalid_status_c76b5be9", "Прокси вернул некорректный статус")}${targetSuffix}`, msg, { ...proxyMeta, status: res ? res.status : null }, probeGroupKey);
         result = { ok: false, error: msg };
       }
     } catch (fetchErr) {
-      clearTimeout(timer);
       ensureCurrent();
-      if (fetchErr.name === 'AbortError') {
+      if (controller.signal.aborted || fetchErr.name === 'AbortError') {
         const msg = t("msg_timeout_the_proxy_server_did_not_respond_with_0c5f062e", "Таймаут: прокси-сервер не ответил за 5 секунд");
-        logger.warn('proxy', t("msg_proxy_connection_timed_out_a443899a", "Таймаут подключения к прокси"), msg, proxyMeta);
+        logger.warn('proxy', `${t("msg_proxy_connection_timed_out_a443899a", "Таймаут подключения к прокси")}${targetSuffix}`, msg, proxyMeta, probeGroupKey);
         result = { ok: false, error: msg };
       } else {
         const errStr = (fetchErr.message || String(fetchErr)).toLowerCase();
         let msg = '';
-        if (errStr.includes('407') || errStr.includes('auth')) {
+        if (probeAuth.wasDenied() || /\b407\b/.test(errStr)) {
           msg = t("msg_authentication_failed_407_incorrect_username__4a9eba6e", "Ошибка авторизации (407): неверный логин или пароль");
-          logger.warn('auth', t("msg_authentication_failed_79fb3249", "Ошибка авторизации"), msg, proxyMeta);
+          logger.warn('auth', `${t("msg_authentication_failed_79fb3249", "Ошибка авторизации")}${targetSuffix}`, msg, proxyMeta, probeGroupKey);
         } else if (errStr.includes('cert') || errStr.includes('tls') || errStr.includes('ssl')) {
           msg = t("msg_tls_ssl_error_if_your_local_proxy_does_not_us_fffbdb88", "Ошибка TLS/SSL: если ваш локальный прокси без SSL, выберите протокол HTTP вместо HTTPS");
-          logger.warn('proxy', t("msg_proxy_ssl_tls_error_a5e9fedd", "Ошибка SSL/TLS прокси"), msg, { ...proxyMeta, error: fetchErr.message });
+          logger.warn('proxy', `${t("msg_proxy_ssl_tls_error_a5e9fedd", "Ошибка SSL/TLS прокси")}${targetSuffix}`, msg, { ...proxyMeta, error: fetchErr.message }, probeGroupKey);
         } else {
           msg = t("msg_cannot_connect_to_the_proxy_check_that_the_se_95fe5d54", "Не удалось подключиться к прокси. Убедитесь, что сервер запущен и выбран правильный протокол (HTTP/HTTPS/SOCKS5)");
-          logger.warn('proxy', t("msg_proxy_connection_failed_ee759242", "Сбой подключения к прокси"), msg, { ...proxyMeta, error: fetchErr.message });
+          logger.warn('proxy', `${t("msg_proxy_connection_failed_ee759242", "Сбой подключения к прокси")}${targetSuffix}`, msg, { ...proxyMeta, error: fetchErr.message }, probeGroupKey);
         }
         result = { ok: false, error: msg };
       }
+    } finally {
+      clearTimeout(timer);
+      probeAuth.close();
     }
   } finally {
     // 4. Restore exactly what was active before the probe. Permanent proxy
     // changes wait on the same lock and will run immediately afterwards.
     try {
-      await assertProxySettingsControllable();
-      await proxyBackend.restore(previousDetails);
+      if (attemptedApply) {
+        await assertProxySettingsControllable();
+        await proxyBackend.restore(previousDetails);
+      }
     } catch (restoreErr) {
       const msg = t("msg_failed_to_restore_proxy_settings_after_the_ch_53688b8c", "Не удалось восстановить настройки прокси после проверки: $1", [restoreErr.message || restoreErr]);
       logger.error('proxy', t("msg_critical_proxy_restoration_error_1ab48bfb", "Критическая ошибка восстановления прокси"), msg);

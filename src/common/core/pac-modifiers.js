@@ -34,7 +34,7 @@ export function getDefaultConfigs() {
       dflt: true,
       ifDfltMods: true,
       label: t("msg_proxy_or_fail_d2da522e", "проксируй или умри!"),
-      desc: t("msg_prevent_direct_connections_when_the_proxy_fai_3300e70c", "Запрещает прямое соединение без прокси в случаях, когда прокси отказывает."),
+      desc: t("msg_prevent_direct_connections_when_the_proxy_fai_3300e70c", "Действует только для PAC-скрипта: запрещает прямое соединение без прокси, когда прокси из PAC отказывает. Поведение своих прокси настраивается отдельно."),
       order: 3,
       category: 'general',
     },
@@ -93,6 +93,14 @@ export function getDefaultConfigs() {
       category: 'ownProxies',
       order: 8,
     },
+    fallbackProxyId: {
+      dflt: null,
+      category: 'ownProxies',
+    },
+    ownProxyOrDie: {
+      dflt: true,
+      category: 'ownProxies',
+    },
     ifProxyMoreDomains: {
       dflt: false,
       category: 'general',
@@ -121,13 +129,19 @@ export function getDefaults() {
 export function createPacModifiers(mods = {}) {
   mods = mods || {};
   const configs = getDefaultConfigs();
+  const hasValue = value => Array.isArray(value) ? value.length > 0 :
+    value && typeof value === 'object' ? Object.keys(value).length > 0 :
+      typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
   const ifNoMods = Object.keys(configs).every((dProp) => {
-    const ifDflt = !(dProp in mods && Boolean(configs[dProp].dflt) !== Boolean(mods[dProp]));
+    const actual = dProp === 'ownProxyOrDie' && mods[dProp] === null ? true : mods[dProp];
+    const ifDflt = !(dProp in mods && hasValue(configs[dProp].dflt) !== hasValue(actual));
     const ifMods = configs[dProp].ifDfltMods;
     return ifDflt ? !ifMods : ifMods;
   });
 
   const defaults = getDefaults();
+  const proxyRoutes = compileProxyRoutes(mods);
+  const siteResourceInheritance = sanitizeSiteResourceInheritance(mods.siteResourceInheritance);
   const self = {
     ifProxyHttpsUrlsOnly: mods.ifProxyHttpsUrlsOnly !== undefined ? Boolean(mods.ifProxyHttpsUrlsOnly) : defaults.ifProxyHttpsUrlsOnly,
     ifUseSecureProxiesOnly: mods.ifUseSecureProxiesOnly !== undefined ? Boolean(mods.ifUseSecureProxiesOnly) : defaults.ifUseSecureProxiesOnly,
@@ -145,15 +159,18 @@ export function createPacModifiers(mods = {}) {
     exceptions: mods.exceptions || {},
     proxyProfiles: mods.proxyProfiles || [],
     defaultProxyId: mods.defaultProxyId || null,
+    fallbackProxyId: mods.fallbackProxyId || null,
+    ownProxyOrDie: mods.ownProxyOrDie !== false,
+    fallbackProxyChain: mods.fallbackProxyId ? proxyRoutes[mods.fallbackProxyId] || '' : '',
     domainProxyIds: mods.domainProxyIds || {},
     domainLists: mods.domainLists || [],
     pacBypassDomains: mods.pacBypassDomains || [],
-    siteResourceInheritance: sanitizeSiteResourceInheritance(mods.siteResourceInheritance),
-    proxyRoutes: compileProxyRoutes(mods),
+    siteResourceInheritance,
+    proxyRoutes,
     proxyCatalogRevision: mods._proxyCatalogRevision || 0,
     whitelist: mods.whitelist || [],
     ifNoMods: ifNoMods && !(mods.domainLists || []).some(list => list.enabled && list.domains.length) &&
-      !(mods.pacBypassDomains || []).length,
+      !(mods.pacBypassDomains || []).length && !Object.keys(siteResourceInheritance).length,
     revision: Number(mods._revision) || 0,
     rulesRevision: Number(mods._rulesRevision ?? mods._revision) || 0,
     ruleMeta: mods.ruleMeta || {},

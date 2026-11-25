@@ -18,6 +18,7 @@ let site = null;
 let busy = false;
 let revision = 0;
 let refreshTimer;
+let storageRefreshPending = false;
 let enabled = false;
 let wholeSite = false;
 let resourceRevision;
@@ -47,7 +48,7 @@ function showLoadError(error) {
   el.loadError.hidden = false;
   el.loadErrorText.textContent = error.message || String(error);
   el.status.textContent = t("msg_no_connection_9f0c20cc", "Нет связи");
-  el.status.classList.remove('active');
+  el.status.className = 'status error';
   el.reload.disabled = true;
   setBusy(busy);
 }
@@ -61,13 +62,30 @@ function setBusy(value) {
   el.inheritResources.disabled = blocked || !canSetInheritance;
   el.directResources.disabled = el.inheritResources.disabled;
   el.resourceMode.classList.toggle('disabled', el.inheritResources.disabled);
+  if (!value && storageRefreshPending) scheduleStorageRefresh();
 }
 
-async function refresh() {
+function scheduleStorageRefresh() {
+  storageRefreshPending = true;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (!busy && storageRefreshPending) refresh(true).catch(showLoadError);
+  }, 100);
+}
+
+async function refresh(fromStorage = false) {
+  storageRefreshPending = false;
   const requestRevision = ++revision;
   const current = await activeSite();
   const response = await sendMessage({ action: 'GET_STATE', currentDomain: current?.fullHost || '', currentTabId: current?.tabId });
   if (requestRevision !== revision) return;
+  // The user may have opened a native menu while the state read was in flight.
+  const active = document.activeElement;
+  if (fromStorage && sameSite(site, current) && active?.matches('select') &&
+      (el.siteProxyWrap.contains(active) || el.resources.contains(active))) {
+    storageRefreshPending = true;
+    return;
+  }
   if (!response.success) { showLoadError(response.error || t("msg_failed_to_load_settings_76fbbdec", "Не удалось загрузить настройки.")); return; }
   el.loadError.hidden = true;
   if (!sameSite(site, current)) { resourceReloadNeeded = false; notice(''); }
@@ -79,8 +97,11 @@ async function refresh() {
   el.version.textContent = t("msg_version_sub_a48a5022", "Версия $1", [data.version]);
   el.version.closest('.brand').title = el.version.textContent;
   enabled = data.syncState.currentPacProviderKey !== 'none';
+  const statusState = data.settingsState?.pending ? 'warning'
+    : !enabled ? 'inactive'
+      : data.syncState.isControlled ? 'active' : 'warning';
   el.status.textContent = data.settingsState?.pending ? t("msg_not_applied_09415f65", "Не применено") : enabled && data.syncState.isControlled ? t('fidelity_enabled', 'Включено') : enabled ? t("msg_no_control_cce05ad1", "Нет контроля") : t("msg_disabled_3e958000", "Отключено");
-  el.status.classList.toggle('active', enabled && data.syncState.isControlled && !data.settingsState?.pending);
+  el.status.className = `status ${statusState}`;
   renderApplicationBanner(el.applicationBanner, data.settingsState, () => refresh().catch(showLoadError));
   el.siteCard.hidden = !site;
   el.empty.hidden = Boolean(site);
@@ -167,10 +188,19 @@ async function refresh() {
   setBusy(busy);
 }
 
+function restoreRouteFocus(previous, target, select) {
+  const active = document.activeElement;
+  if (previous && (active === document.body || active === previous) && sameSite(site, target) && select && !select.disabled) {
+    select.focus({ preventScroll: true });
+  }
+}
+
 async function changeResourceProxy(host, proxyId) {
   if (!site || busy || !el.loadError.hidden || !proxyId || !resourceRulesEnabled) return;
   const reset = proxyId === RESET_RESOURCE_ROUTE;
   if (reset && (site.incognito || !resourceRoutes[host]?.canResetExact)) return;
+  const active = document.activeElement;
+  const focused = active?.dataset.host === host && el.resources.contains(active) ? active : null;
   const target = { ...site };
   const expectedRevision = resourceRevision;
   revision++;
@@ -195,7 +225,12 @@ async function changeResourceProxy(host, proxyId) {
         t('msg_sub_sub_reload_the_site_to_refresh_connection_41fb1aff', '$1: $2. Перезагрузите сайт, чтобы обновить соединения.',
           [host, direct ? t('msg_direct_f9efbd77', 'напрямую') : t('msg_via_proxy_64f51a1b', 'через прокси')]), true);
   } catch (error) { notice(error.message); }
-  finally { await refresh().catch(showLoadError); setBusy(false); }
+  finally {
+    await refresh().catch(showLoadError);
+    setBusy(false);
+    const select = [...el.resources.querySelectorAll('select')].find(node => node.dataset.host === host);
+    restoreRouteFocus(focused, target, select);
+  }
 }
 
 async function changeResourceInheritance(requested) {
@@ -222,7 +257,8 @@ async function changeResourceInheritance(requested) {
 
 async function changeSiteMode(mode, proxyId) {
   if (!site || busy || !el.loadError.hidden) return;
-  const focused = document.activeElement === el.siteProxyWrap.querySelector('select');
+  const active = document.activeElement;
+  const focused = active === el.siteProxyWrap.querySelector('select') ? active : null;
   revision++;
   const target = { ...site };
   const includeResources = wholeSite;
@@ -249,7 +285,7 @@ async function changeSiteMode(mode, proxyId) {
     await refresh().catch(showLoadError);
     setBusy(false);
     const select = el.siteProxyWrap.querySelector('select');
-    if (focused && sameSite(site, target) && select && !select.disabled) select.focus({ preventScroll: true });
+    restoreRouteFocus(focused, target, select);
   }
 }
 
@@ -262,7 +298,7 @@ for (const input of [el.inheritResources, el.directResources]) input.addEventLis
   el.directResources.checked = !inheritResources;
   if (changed) await changeResourceInheritance(requested);
   const selected = inheritResources ? el.inheritResources : el.directResources;
-  if (focused && sameSite(site, target) && !selected.disabled) selected.focus({ preventScroll: true });
+  restoreRouteFocus(focused ? input : null, target, selected);
 });
 el.reload.addEventListener('click', async () => {
   if (!site || busy || applicationPending || !el.loadError.hidden) return;
@@ -285,12 +321,14 @@ el.reload.addEventListener('click', async () => {
 });
 
 el.retryLoad.addEventListener('click', () => refresh().catch(showLoadError));
+document.addEventListener('focusout', event => {
+  if (storageRefreshPending && event.target.matches('select')) scheduleStorageRefresh();
+});
 for (const button of document.querySelectorAll('[data-section]')) button.addEventListener('click', () => openSettings(button.dataset.section));
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === 'local' && (changes['pac-kitchen-mods'] || changes['settings-application'] || changes.antiCensorRu)) ||
       (area === 'session' && changes['site-resource-tabs'])) {
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => { if (!busy) refresh().catch(showLoadError); }, 100);
+    scheduleStorageRefresh();
   }
 });
 refresh().catch(showLoadError);

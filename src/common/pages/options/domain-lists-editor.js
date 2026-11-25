@@ -1,9 +1,13 @@
 'use strict';
 
 import { t } from '../../core/i18n.js';
-import { parseDomainRuleLines } from '../../core/domain-rules.js';
+import { normalizeDomainListName } from '../../core/domain-lists.js';
 import { sendMessage } from '../shared/client.js';
 import { refreshSettingsHelp } from './settings-help.js';
+
+import { domainListImportName, readListFile, listPreviewText } from './domain-file-io.js';
+
+export { domainListImportName, domainListExportFilename, parseListText, readListFile, listPreviewText } from './domain-file-io.js';
 
 let nextEditorScope = 0;
 
@@ -48,29 +52,6 @@ export function confirmListAction(root, text, details = '') {
     dialog.addEventListener('close', () => { const ok = dialog.returnValue === 'confirm'; dialog.remove(); resolve(ok); }, { once: true });
     dialog.showModal();
   });
-}
-
-export function parseListText(text) {
-  const lines = String(text).split(/\r\n|\r|\n/);
-  if (lines.length > 100001) throw new Error(t('dlLimit', 'Не более 100 000 доменов; файл до 5 МБ.'));
-  const parsed = parseDomainRuleLines(lines);
-  if (parsed.validDomains.length > 100000) throw new Error(t('dlLimit', 'Не более 100 000 доменов; файл до 5 МБ.'));
-  return parsed;
-}
-
-export async function readListFile(file) {
-  if (!file || !/\.txt$/i.test(file.name) || file.size > 5 * 1024 * 1024) throw new Error(t('dlFileType', 'Выберите текстовый файл UTF-8 (.txt), не более 5 МБ.'));
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-  // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(text)) throw new Error(t('dlFileType', 'Выберите текстовый файл UTF-8 (.txt), не более 5 МБ.'));
-  const parsed = parseListText(text);
-  if (!parsed.validDomains.length) throw new Error(t('dlEmptyImport', 'Нет корректных доменов. Существующие данные не изменены.'));
-  return parsed;
-}
-
-export function listPreviewText(parsed) {
-  return t('dlPreview', 'Доменов: $1 · некорректных строк: $2. URL преобразуются в домены, пути не учитываются.', [parsed.validDomains.length, parsed.skippedCount])
-    + (parsed.errors.length ? '\n' + parsed.errors.slice(0, 10).map(row => `${row.line}: ${row.value}`).join('\n') : '');
 }
 
 export function initDomainListsEditor(root, options, createEditor) {
@@ -142,56 +123,74 @@ export function initDomainListsEditor(root, options, createEditor) {
     [ids[index],ids[target]] = [ids[target],ids[index]];
     return reorderAndFocus(ids, id, data.revision);
   }
-  function previewDrag() {
-    if (!drag?.moved) return;
-    const session = drag, others = rowNodes().filter(row => row !== session.row);
-    const next = others.find(row => {
-      const box = row.getBoundingClientRect(); return session.y < box.top + box.height / 2;
-    });
-    session.row.style.transform = '';
+  function previewDrag(bounds = rows.getBoundingClientRect()) {
+    const session = drag;
+    // Container-relative positions survive scrolling without remeasuring each row.
+    const measure = () => {
+      session.geometry = {
+        width: bounds.width, height: bounds.height,
+        top: session.row.getBoundingClientRect().top - bounds.top - session.shift,
+        midpoints: session.others.map(row => {
+          const box = row.getBoundingClientRect();
+          return box.top - bounds.top + box.height / 2;
+        }),
+      };
+    };
+    if (!session.geometry || session.geometry.width !== bounds.width || session.geometry.height !== bounds.height) measure();
+    const y = session.y - bounds.top;
+    const next = session.geometry.midpoints.findIndex(midpoint => y < midpoint);
+    const index = next < 0 ? session.others.length : next;
     // Removing/reinserting the captured subtree releases pointer capture, even
     // for insertBefore(row, row.nextSibling). Move only its neighbours instead.
-    const index = next ? others.indexOf(next) : others.length;
-    let anchor = session.row;
-    for (let i = index - 1; i >= 0; i--) {
-      const sibling = others[i];
-      if (sibling.nextElementSibling !== anchor) rows.insertBefore(sibling, anchor);
-      anchor = sibling;
+    if (index !== session.index) {
+      const movingDown = index > session.index;
+      const crossed = session.others.slice(Math.min(index, session.index), Math.max(index, session.index));
+      const anchor = movingDown ? session.row : session.others[session.index] || null;
+      for (const sibling of crossed) rows.insertBefore(sibling, anchor);
+      session.index = index;
+      updatePositions();
+      measure();
     }
-    anchor = session.row;
-    for (const sibling of others.slice(index)) {
-      if (anchor.nextElementSibling !== sibling) rows.insertBefore(sibling, anchor.nextSibling);
-      anchor = sibling;
-    }
-    const box = session.row.getBoundingClientRect();
-    rows.style.setProperty('--drop-top', `${box.top - rows.getBoundingClientRect().top}px`);
-    session.row.style.transform = `translateY(${session.y - session.offset - box.top}px)`;
-    updatePositions();
+    rows.style.setProperty('--drop-top', `${session.geometry.top}px`);
+    session.shift = y - session.offset - session.geometry.top;
+    session.row.style.transform = `translateY(${session.shift}px)`;
   }
-  function scrollDrag() {
+  function dragTick() {
+    dragFrame = 0;
     if (!drag?.moved) return;
-    const scroller = document.scrollingElement, before = scroller.scrollTop;
+    const scroller = document.scrollingElement;
+    const before = scroller.scrollTop;
     const delta = drag.y < 48 ? -12 : drag.y > innerHeight - 48 ? 12 : 0;
     if (delta) scroller.scrollTop += delta;
-    if (scroller.scrollTop !== before) previewDrag();
-    dragFrame = requestAnimationFrame(scrollDrag);
+    previewDrag();
+    if (scroller.scrollTop !== before) scheduleDrag();
+  }
+  function scheduleDrag() {
+    if (drag?.moved && !dragFrame) dragFrame = requestAnimationFrame(dragTick);
+  }
+  function onDragResize() {
+    if (drag?.moved) { drag.geometry = null; scheduleDrag(); }
   }
   function onDragMove(event) {
     if (!drag || event.pointerId !== drag.pointerId) return;
-    event.preventDefault(); drag.x = event.clientX; drag.y = event.clientY;
+    event.preventDefault(); drag.y = event.clientY;
     if (!drag.moved && Math.abs(drag.y - drag.startY) < 5) return;
     if (!drag.moved) {
       drag.moved = true; drag.row.classList.add('is-dragging'); rows.classList.add('is-sorting');
       document.documentElement.classList.add('domain-list-dragging');
-      dragFrame = requestAnimationFrame(scrollDrag);
     }
-    previewDrag();
+    scheduleDrag();
   }
   function finishDrag(commit = false, event) {
     if (!drag || (event && event.pointerId !== drag.pointerId)) return;
-    const session = drag, bounds = rows.getBoundingClientRect();
-    const inside = !event || (event.clientX >= bounds.left && event.clientX <= bounds.right &&
-      event.clientY >= Math.max(0,bounds.top) && event.clientY <= Math.min(innerHeight,bounds.bottom));
+    const session = drag;
+    const bounds = commit && event ? rows.getBoundingClientRect() : null;
+    const inside = bounds && event.clientX >= bounds.left && event.clientX <= bounds.right &&
+      event.clientY >= Math.max(0,bounds.top) && event.clientY <= Math.min(innerHeight,bounds.bottom);
+    if (inside && session.moved) {
+      session.y = event.clientY;
+      previewDrag(bounds);
+    }
     const ids = rowNodes().map(row => row.dataset.listId);
     drag = null; cancelAnimationFrame(dragFrame); dragFrame = 0;
     document.removeEventListener('pointermove', onDragMove);
@@ -200,6 +199,8 @@ export function initDomainListsEditor(root, options, createEditor) {
     document.removeEventListener('keydown', onDragKey, true);
     document.removeEventListener('visibilitychange', onDragVisibility);
     window.removeEventListener('blur', onDragCancel);
+    window.removeEventListener('resize', onDragResize);
+    window.removeEventListener('scroll', scheduleDrag, true);
     session.row.style.transform = ''; session.row.classList.remove('is-dragging'); rows.classList.remove('is-sorting');
     rows.style.removeProperty('--drop-top');
     document.documentElement.classList.remove('domain-list-dragging');
@@ -209,9 +210,12 @@ export function initDomainListsEditor(root, options, createEditor) {
       void reorderAndFocus(ids, session.row.dataset.listId, session.revision);
       return;
     }
-    const existing = new Map(rowNodes().map(row => [row.dataset.listId,row]));
-    for (const id of session.ids) if (existing.has(id)) rows.append(existing.get(id));
-    updatePositions(); controls();
+    if (ids.some((id, index) => id !== session.ids[index])) {
+      const existing = new Map(rowNodes().map(row => [row.dataset.listId,row]));
+      for (const id of session.ids) if (existing.has(id)) rows.append(existing.get(id));
+      updatePositions();
+    }
+    controls();
     if (session.moved) announce(t('dlOrderCancelled','Перемещение отменено. Порядок не изменён.'));
     focusHandle(session.row.dataset.listId);
   }
@@ -226,7 +230,9 @@ export function initDomainListsEditor(root, options, createEditor) {
   function beginDrag(event, row, handle) {
     if (event.button !== 0 || drag || !canReorder() || data.lists.length < 2) return;
     event.preventDefault(); handle.focus({preventScroll:true});
-    drag = {row,handle,pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
+    const items = rowNodes();
+    drag = {row,handle,pointerId:event.pointerId,y:event.clientY,startY:event.clientY,
+      others:items.filter(item => item !== row),index:items.indexOf(row),geometry:null,shift:0,
       offset:event.clientY-row.getBoundingClientRect().top,ids:data.lists.map(list=>list.id),
       revision:data.revision,generation,moved:false};
     // Real pointers are captured; scripted accessibility/browser fixtures still
@@ -238,6 +244,8 @@ export function initDomainListsEditor(root, options, createEditor) {
     document.addEventListener('keydown', onDragKey, true);
     document.addEventListener('visibilitychange', onDragVisibility);
     window.addEventListener('blur', onDragCancel);
+    window.addEventListener('resize', onDragResize);
+    window.addEventListener('scroll', scheduleDrag, true);
     controls();
   }
 
@@ -275,6 +283,18 @@ export function initDomainListsEditor(root, options, createEditor) {
       if (read !== reads || gen !== generation) return false;
       if (!response?.success || !response.data || !Array.isArray(response.data.lists) || !Number.isSafeInteger(response.data.revision)) { error(response); return false; }
       data = response.data; failed = false; retry.hidden = true;
+      const liveIds = new Set(data.lists.map(list => list.id));
+      for (const [id, entry] of editors) {
+        if (liveIds.has(id)) continue;
+        entry.editor.invalidate();
+        entry.root.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+        entry.root.remove();
+        editors.delete(id);
+        if (active === entry) {
+          active = null; back.hidden = true; scopeTitle.textContent = ''; catalog.hidden = false;
+          notify(t('dlErrorUnknown', 'Лист больше не существует.'));
+        }
+      }
       onApplicationState(response.settingsState);
       status.textContent = t('dlPriority', 'Приоритет сверху вниз: первый включённый лист с совпадением. Выключенные листы пропускаются.');
       render();
@@ -283,7 +303,7 @@ export function initDomainListsEditor(root, options, createEditor) {
       return true;
     } catch (cause) { if (read === reads && gen === generation) error({error:cause.message}); return false; }
   }
-  async function verifyWrite(pending) {
+  async function verifyWrite(pending, { acceptLatest = false } = {}) {
     if (pending.generation !== generation) return false;
     // Storage notifications/background refresh can supersede this read after
     // the write already committed. Retry only abandoned snapshots, never the
@@ -297,17 +317,23 @@ export function initDomainListsEditor(root, options, createEditor) {
       if (read === reads) return false;
     }
     if (!loaded) return false;
+    if (acceptLatest && pending.mismatch && Number.isSafeInteger(pending.revision) && data.revision > pending.revision) {
+      awaitingReadback = null;
+      return true;
+    }
+    const mismatch = () => { pending.mismatch = true; error(null); return false; };
     const message = pending.message;
     if (message.action === 'SAVE_DOMAIN_LIST') {
       const id = pending.listId || data.lists.find(list=>!pending.knownIds.includes(list.id) && list.name===message.name)?.id;
-      if (!id) { error(null); return false; }
+      if (!id) return mismatch();
       const response = await sendMessage({action:'GET_DOMAIN_LIST',listId:id});
       if (pending.generation !== generation) return false;
       const actual = response?.data?.list;
-      if (!response?.success || !actual || ['name','proxyId','enabled','domains'].some(key=>Object.hasOwn(message,key) && JSON.stringify(actual[key])!==JSON.stringify(message[key]))) { error(response); return false; }
+      if (!response?.success) { error(response); return false; }
+      if (!actual || ['name','proxyId','enabled','domains'].some(key=>Object.hasOwn(message,key) && JSON.stringify(actual[key])!==JSON.stringify(message[key]))) return mismatch();
       onApplicationState(response.settingsState);
-    } else if (message.action === 'DELETE_DOMAIN_LIST' && data.lists.some(list=>list.id===message.listId)) { error(null); return false; }
-    else if (message.action === 'REORDER_DOMAIN_LISTS' && JSON.stringify(data.lists.map(list=>list.id))!==JSON.stringify(message.listIds)) { error(null); return false; }
+    } else if (message.action === 'DELETE_DOMAIN_LIST' && data.lists.some(list=>list.id===message.listId)) return mismatch();
+    else if (message.action === 'REORDER_DOMAIN_LISTS' && JSON.stringify(data.lists.map(list=>list.id))!==JSON.stringify(message.listIds)) return mismatch();
     awaitingReadback=null;
     return true;
   }
@@ -320,7 +346,9 @@ export function initDomainListsEditor(root, options, createEditor) {
       if (gen !== generation) return false;
       onApplicationState(response?.settingsState);
       if (!response?.success) { error(response); return false; }
-      awaitingReadback={message,listId:response.data?.listId || message.listId,knownIds:data.lists.map(list=>list.id),generation:gen,formWrite};
+      awaitingReadback={message,listId:response.data?.listId || message.listId,
+        revision:response.data?.committedRevision ?? response.data?.revision,
+        knownIds:data.lists.map(list=>list.id),generation:gen,formWrite};
       if (!await verifyWrite(awaitingReadback)) return false;
       status.textContent = response.settingsState?.pending ? t('msg_saved_waiting_to_apply_cee8b842', 'Сохранено · ожидает применения') : t('msg_saved_6c67d096', '✓ Сохранено');
       return true;
@@ -369,7 +397,10 @@ export function initDomainListsEditor(root, options, createEditor) {
       const handle = iconButton(t('dlDragFor','Переместить лист «$1»',[list.name]), 'grip', () => {}, 'domain-list-handle');
       handle.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown');
       handle.setAttribute('aria-describedby', 'domainListsReorderHint');
-      handle.addEventListener('pointerdown', event => beginDrag(event, row, handle));
+      row.addEventListener('pointerdown', event => {
+        if (event.target.closest('select,input,label,.domain-list-name,.domain-list-actions')) return;
+        beginDrag(event, row, handle);
+      });
       handle.addEventListener('lostpointercapture', () => { if (drag?.handle === handle) finishDrag(false); });
       handle.addEventListener('keydown', event => {
         if (!event.altKey || !['ArrowUp','ArrowDown'].includes(event.key) || drag) return;
@@ -433,7 +464,7 @@ export function initDomainListsEditor(root, options, createEditor) {
     busy=true; controls();
     try {
       const pending=awaitingReadback;
-      const loaded=pending ? await verifyWrite(pending) : await refresh();
+      const loaded=pending ? await verifyWrite(pending, { acceptLatest: true }) : await refresh();
       if (gen!==generation) return;
       if (loaded) {
         formRevision=data.revision;
@@ -444,8 +475,14 @@ export function initDomainListsEditor(root, options, createEditor) {
   });
   back.addEventListener('click',goBack);
   file.addEventListener('change',async()=>{
-    const read=++fileRead, gen=generation; parsed=null; controls();
-    try { const result=await readListFile(file.files[0]); if(read!==fileRead || gen!==generation) return; parsed=result; preview.textContent=listPreviewText(result); }
+    const read=++fileRead, gen=generation, selected=file.files[0], previousName=name.value; parsed=null; controls();
+    if (!selected) { preview.textContent = ''; return; }
+    try {
+      const result=await readListFile(selected);
+      if(read!==fileRead || gen!==generation) return;
+      parsed=result; preview.textContent=listPreviewText(result);
+      if(name.value===previousName) name.value=domainListImportName(selected.name,data.lists.map(list=>list.name));
+    }
     catch(cause) { if(read===fileRead && gen===generation) preview.textContent=cause.message; }
     controls();
   });
@@ -453,6 +490,9 @@ export function initDomainListsEditor(root, options, createEditor) {
     event.preventDefault();
     const normalized=name.value.normalize('NFKC').trim();
     if(!normalized || [...normalized].length>64) { preview.textContent=t('dlNameError','Название: от 1 до 64 символов.'); return; }
+    if(data.lists.some(list=>list.id!==editing?.id && normalizeDomainListName(list.name).toLowerCase()===normalized.toLowerCase())) {
+      preview.textContent=t('dlNameExists','Лист с таким названием уже существует. Выберите другое имя.'); return;
+    }
     if(!editing && !data.proxyCatalog.some(proxy=>proxy.enabled && proxy.id===target.value)) { preview.textContent=t('mpErrorChoice','Выберите прокси для новых сайтов.'); return; }
     if(importMode && !parsed) return;
     const payload=editing ? {action:'SAVE_DOMAIN_LIST',listId:editing.id,name:normalized} : {action:'SAVE_DOMAIN_LIST',name:normalized,proxyId:target.value,enabled:true,domains:parsed?.validDomains || []};

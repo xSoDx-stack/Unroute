@@ -29,6 +29,26 @@ describe('BlockInformer & IpToHost', () => {
     expect(ipToHost.isProxyIp('51.158.176.144')).to.be.true;
     expect(ipToHost.get('8.8.8.8')).to.be.null;
   });
+  it('does not publish a cold request after its tab stats were cleared', async () => {
+    const original = appState.ensureRoutingStateInitialized;
+    const initialized = appState.isRequestStateInitialized;
+    const tabId = 4040;
+    let release;
+    appState.isRequestStateInitialized = false;
+    appState.ensureRoutingStateInitialized = () => new Promise(resolve => { release = resolve; });
+    try {
+      const pending = blockInformer.handleRequest({ tabId, type: 'main_frame', url: 'https://example.test/',
+        proxyInfo: { type: 'https', host: 'proxy.test', port: 443 } });
+      blockInformer.clearTab(tabId);
+      release();
+      await pending;
+      expect(blockInformer.getTabStats(tabId).count).to.equal(0);
+    } finally {
+      appState.isRequestStateInitialized = initialized;
+      appState.ensureRoutingStateInitialized = original;
+      blockInformer.clearTab(tabId);
+    }
+  });
 
   it('should dynamically register custom proxy IPs and hostnames', () => {
     // P2.4: '198.51.100.25:8080' contains a port so it is NOT a bare IPv4 address —
@@ -275,7 +295,7 @@ describe('BlockInformer & IpToHost', () => {
         error: 'net::ERR_TUNNEL_CONNECTION_FAILED',
       };
       await blockInformer.handleRequest(details);
-      blockInformer.handleConnectionError(details);
+      await blockInformer.handleConnectionError(details);
       expect(blockInformer.getTabStats(tabId)).to.deep.equal({ count: 0, hosts: [], proxies: [] });
       expect(await blockInformer.getTabRoute(tabId)).to.equal(null);
       expect(entries).to.have.lengthOf(0);
@@ -285,25 +305,31 @@ describe('BlockInformer & IpToHost', () => {
     }
   });
 
-  it('records only top-level proxy request failures as non-fatal warnings', () => {
+  it('restores the journal before recording only top-level proxy request failures', async () => {
     const originalAdd = logger.add;
+    const originalEnsure = appState.ensureLoggerInitialized;
     const entries = [];
-    logger.add = (entry) => entries.push(entry);
+    let restores = 0;
+    appState.ensureLoggerInitialized = async () => { restores++; };
+    logger.add = (entry) => {
+      expect(restores).to.equal(1);
+      entries.push(entry);
+    };
 
     try {
-      blockInformer.handleConnectionError({
+      await blockInformer.handleConnectionError({
         tabId: 7,
         url: 'https://docs.github.com/en',
         error: 'net::ERR_TUNNEL_CONNECTION_FAILED',
         type: 'main_frame',
       });
-      blockInformer.handleConnectionError({
+      await blockInformer.handleConnectionError({
         tabId: 7,
         url: 'https://github.githubassets.com/app.js',
         error: 'net::ERR_TUNNEL_CONNECTION_FAILED',
         type: 'script',
       });
-      blockInformer.handleConnectionError({
+      await blockInformer.handleConnectionError({
         tabId: -1,
         url: 'https://1.1.1.1/cdn-cgi/trace',
         error: 'net::ERR_PROXY_CONNECTION_FAILED',
@@ -311,10 +337,11 @@ describe('BlockInformer & IpToHost', () => {
       });
 
       expect(entries).to.have.lengthOf(1);
+      expect(restores).to.equal(1);
       expect(entries[0]).to.include({
         level: 'warn',
         category: 'proxy',
-        title: 'net::ERR_TUNNEL_CONNECTION_FAILED',
+        title: 'net::ERR_TUNNEL_CONNECTION_FAILED → docs.github.com',
         groupKey: 'net::ERR_TUNNEL_CONNECTION_FAILED|docs.github.com|main_frame',
       });
       expect(entries[0].message).to.include('отдельный запрос');
@@ -326,6 +353,7 @@ describe('BlockInformer & IpToHost', () => {
       });
     } finally {
       logger.add = originalAdd;
+      appState.ensureLoggerInitialized = originalEnsure;
     }
   });
 });

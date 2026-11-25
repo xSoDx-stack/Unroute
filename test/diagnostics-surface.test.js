@@ -9,11 +9,12 @@ describe('Local diagnostics surface', () => {
     const app = read('src/common/pages/options/app.js');
     assert.doesNotMatch(app, /chrome\.tabs\.query|currentSiteDomain/);
   });
-  it('retains connection, PAC source and reset without automatic page scripts', () => {
+  it('retains diagnostics and adds portable settings without automatic page scripts', () => {
     const html = read('src/common/pages/options/index.html');
     const tools = html.match(/<section[^>]+id="tab-tools"[\s\S]*?<\/section>/)[0];
     assert.deepEqual([...tools.matchAll(/<button[^>]+id="([^"]+)"/g)].map(match => match[1]),
-      ['testConnBtn', 'viewPacScriptBtn', 'resetSettingsBtn']);
+      ['portable-export', 'portable-import', 'testConnBtn', 'viewPacScriptBtn', 'resetSettingsBtn']);
+    assert.match(tools, /id="portable-warning"[^>]*role="note"/);
     for (const target of ['src/common/manifest.json', 'src/firefox/manifest.json']) {
       const manifest = JSON.parse(read(target));
       assert.deepEqual(manifest.content_scripts || [], []);
@@ -25,7 +26,7 @@ describe('Local diagnostics surface', () => {
   });
   it('preserves every PAC mode and uses neutral localized preset descriptions', () => {
     const html = read('src/common/pages/options/index.html');
-    const ast = parse(read('src/common/core/pac-sync.js'), { ecmaVersion: 'latest', sourceType: 'module' });
+    const ast = parse(read('src/common/core/pac-providers.js'), { ecmaVersion: 'latest', sourceType: 'module' });
     const declaration = ast.body.find(node => node.type === 'ExportNamedDeclaration' &&
       node.declaration?.declarations?.[0].id.name === 'PAC_PROVIDERS');
     const providers = new Map(declaration.declaration.declarations[0].init.properties.map(node => [node.key.name || node.key.value, node.value]));

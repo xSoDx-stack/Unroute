@@ -3,6 +3,7 @@
 import { expect } from 'chai';
 import { utils } from '../src/common/core/utils.js';
 import { pacSync, PAC_PROVIDERS } from '../src/common/core/pac-sync.js';
+import { PAC_PROVIDERS as catalog } from '../src/common/core/pac-providers.js';
 import { pacKitchen } from '../src/common/core/pac-kitchen.js';
 import { cookPac } from '../src/common/core/pac-script.js';
 import { createPacModifiers } from '../src/common/core/pac-modifiers.js';
@@ -157,6 +158,7 @@ function FindProxyForURL(url, host) {
     });
 
     it('should preserve customPacUrl in PAC_PROVIDERS registry', () => {
+      expect(PAC_PROVIDERS).to.equal(catalog);
       expect(PAC_PROVIDERS.customPacUrl).to.exist;
       expect(PAC_PROVIDERS.customPacUrl.distinctKey).to.equal('customPacUrl');
       expect(PAC_PROVIDERS.customPacUrl.order).to.equal(3);

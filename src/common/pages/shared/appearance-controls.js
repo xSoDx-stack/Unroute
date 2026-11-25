@@ -2,6 +2,7 @@ import { t } from '../../core/i18n.js';
 import { initAppearance, normalizeHex } from './appearance.js';
 
 const instances = new WeakMap();
+const documentsWithCanonicalIds = new WeakSet();
 let sequence = 0;
 
 // No HTML templates: even storage errors and user-entered colors remain plain text.
@@ -10,14 +11,18 @@ export function initAppearanceControls(container, controller = initAppearance())
   if (instances.has(container)) return instances.get(container);
   const doc = container.ownerDocument;
   const prefix = 'appearance-' + ++sequence;
+  // Keep the first mount's existing anchors; subsequent mounts get their own IDs.
+  const canonical = !documentsWithCanonicalIds.has(doc);
+  documentsWithCanonicalIds.add(doc);
+  const controlId = (name, anchor) => canonical ? anchor : `${prefix}-${name}`;
   const element = (tag, className, text) => {
     const node = doc.createElement(tag);
     if (className) node.className = className;
     if (text) node.textContent = text;
     return node;
   };
-  const select = (name, options) => {
-    const node = element('select', 'appearance-select'); node.id = prefix + '-' + name;
+  const select = (id, options) => {
+    const node = element('select', 'appearance-select'); node.id = id;
     for (const [value, label] of options) {
       const option = element('option', '', label); option.value = value; node.append(option);
     }
@@ -30,11 +35,11 @@ export function initAppearanceControls(container, controller = initAppearance())
   };
   const title = element('h2', 'appearance-title', t('appearance_title', 'Оформление'));
   const description = element('p', 'appearance-description', t('appearance_description', 'Настройки сохраняются автоматически только в этом браузере.'));
-  const theme = select('theme', [
+  const theme = select(controlId('theme', 'appearanceTheme'), [
     ['system', t('appearance_theme_system', 'Как в системе')],
     ['light', t('appearance_theme_light', 'Светлая')], ['dark', t('appearance_theme_dark', 'Тёмная')],
   ]);
-  theme.id = 'appearanceTheme';
+
   const accent = element('div', 'appearance-presets'); accent.id = prefix + '-presets';
   accent.setAttribute('role', 'group'); accent.setAttribute('aria-label', t('appearance_accent', 'Акцентный цвет'));
   const presets = {};
@@ -45,9 +50,9 @@ export function initAppearanceControls(container, controller = initAppearance())
     const button = element('button', 'appearance-preset', label); button.type = 'button';
     button.setAttribute('data-accent', value); presets[value] = button; accent.append(button);
   }
-  const color = element('input', 'appearance-color'); color.type = 'color'; color.id = 'appearanceColor';
+  const color = element('input', 'appearance-color'); color.type = 'color'; color.id = controlId('color', 'appearanceColor');
   color.setAttribute('aria-label', t('appearance_color_picker', 'Выбрать свой цвет'));
-  const hex = element('input', 'appearance-hex'); hex.type = 'text'; hex.id = 'appearanceHex';
+  const hex = element('input', 'appearance-hex'); hex.type = 'text'; hex.id = controlId('hex', 'appearanceHex');
   hex.maxLength = 7; hex.spellcheck = false; hex.autocomplete = 'off'; hex.placeholder = '#78c6b0';
   hex.setAttribute('aria-label', t('appearance_custom_hex', 'Цвет в формате HEX'));
   const validation = element('p', 'appearance-validation'); validation.id = prefix + '-validation';

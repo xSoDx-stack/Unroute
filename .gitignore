@@ -4,6 +4,7 @@ node_modules
 .DS_Store
 Thumbs.db
 .idea/
+.vscode/
 .env
 .env.*
 !.env.example
@@ -17,3 +18,8 @@ Thumbs.db
 /dist/
 /artifacts/
 .amo-upload-uuid
+client_secret_*.json
+service-account*.json
+/CODE_REVIEW_AUDIT*.md
+HANDOFF.md
+/docs/chrome-store-description.md

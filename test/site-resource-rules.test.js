@@ -2,6 +2,16 @@ import { expect } from 'chai';
 import { hasUnassignedResources, inheritResourceRules, planSiteRuleMode, setSiteRuleMode } from '../src/common/core/site-resource-rules.js';
 
 describe('Site resource rule planning without browser state', () => {
+  it('clears an old profile assignment from site-owned resources when switching to the shared chain', () => {
+    const current = {
+      exceptions: { 'example.test': true, 'cdn.test': true, 'manual.test': true },
+      domainProxyIds: { 'cdn.test': 'old', 'manual.test': 'manual' },
+      ruleMeta: { 'exception:cdn.test': { source: 'site', site: 'example.test' } },
+    };
+    const result = planSiteRuleMode(current, 'example.test', ['cdn.test', 'manual.test'], true, null);
+    expect(result.exceptions).to.deep.equal(current.exceptions);
+    expect(result.domainProxyIds).to.deep.equal({ 'manual.test': 'manual' });
+  });
   it('preserves manual root wildcards and the CDN they control on a site switch', () => {
     const current = { exceptions: { 'example.test': true, '*.example.test': true },
       domainProxyIds: { 'example.test': 'site-a', '*.example.test': 'manual-b' },
@@ -42,6 +52,34 @@ describe('Site resource rule planning without browser state', () => {
     expect([...result.changedRecords]).to.deep.equal([direct, proxy]);
     expect(hasUnassignedResources({ ...current, exceptions: result.exceptions }, batches)).to.equal(false);
     expect(exceptions).not.to.have.property('shared.test');
+  });
+
+  it('copies the working settings once while keeping parent resolution on the original settings', () => {
+    const exceptions = Object.freeze({ 'example.test': true });
+    const domainProxyIds = Object.freeze({ 'example.test': 'parent-profile' });
+    const ruleMeta = Object.freeze({ 'exception:cdn.test': Object.freeze({ suppressAuto: true }) });
+    let snapshotReads = 0;
+    const current = Object.freeze({ exceptions, domainProxyIds, ruleMeta,
+      get siteResourceInheritance() {
+        snapshotReads++;
+        return undefined;
+      },
+    });
+    const parent = { root: 'example.test', mainHost: 'example.test' };
+    const other = { root: 'other.test', mainHost: 'other.test' };
+    const result = inheritResourceRules(current, [
+      { record: parent, hosts: ['cdn.test', 'other.test'] },
+      { record: other, hosts: ['child.test'] },
+    ], {});
+
+    expect(snapshotReads).to.equal(1);
+    expect(result.exceptions).to.deep.equal({ ...exceptions, 'cdn.test': true, 'other.test': true });
+    expect(result.domainProxyIds).to.deep.equal({ ...domainProxyIds,
+      'cdn.test': 'parent-profile', 'other.test': 'parent-profile' });
+    expect([...result.changedRecords]).to.deep.equal([parent]);
+    expect(current.exceptions).to.equal(exceptions);
+    expect(current.domainProxyIds).to.equal(domainProxyIds);
+    expect(current.ruleMeta).to.equal(ruleMeta);
   });
 
   it('switches known subdomains and exact external resources without changing unrelated rules', () => {

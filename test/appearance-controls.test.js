@@ -43,6 +43,18 @@ describe('Appearance settings controls', () => {
     expect(f.updates).deep.equal([{ theme: 'dark' }, { accent: 'blue' }]);
     expect(c.status.textContent).not.equal('');
   });
+  it('uses distinct control IDs for each instance while keeping the options anchors', async () => {
+    const { initAppearanceControls } = await import('../src/common/pages/shared/appearance-controls.js');
+    const primary = fixture();
+    const other = primary.container.ownerDocument.createElement('div');
+    const first = initAppearanceControls(primary.container, primary.controller);
+    const second = initAppearanceControls(other, fixture().controller);
+    for (const [name, id] of [['theme', 'appearanceTheme'], ['color', 'appearanceColor'], ['hex', 'appearanceHex']]) {
+      expect(first[name].id).equal(id);
+      expect(second[name].id).not.equal(id);
+    }
+    expect(other.children[2].children[0].htmlFor).equal(second.theme.id);
+  });
   it('validates hex drafts without saving invalid input, and preserves custom on theme changes', async () => {
     const { initAppearanceControls } = await import('../src/common/pages/shared/appearance-controls.js');
     const f = fixture(); const c = initAppearanceControls(f.container, f.controller);

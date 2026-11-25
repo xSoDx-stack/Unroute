@@ -26,10 +26,10 @@ async function scenario(name, run) {
     if(p.hold===m.action){p.held.push({m,done});return;}
     if(p.fail===m.action)return done({success:false,error:'Simulated '+m.action+' failure'});
     const summary=()=>({lists:p.lists.map(({domains,...l})=>({...l,count:domains.length})),revision:p.revision,proxyCatalog:p.catalog,defaultProxyId:'p1'});
-    if(m.action==='GET_STATE')return done({success:true,data:{pacMods:structuredClone(p.mods),syncState:structuredClone(p.sync),notifications:{...p.notifications}},settingsState:{pending:false}});
+    if(m.action==='GET_STATE')return done({success:true,data:{pacMods:structuredClone(p.mods),syncState:structuredClone(p.sync),notifications:{...p.notifications},proxyHealthMap:p.proxyHealthMap},settingsState:{pending:false}});
     if(m.action==='GET_LOGS')return done({success:true,data:{logs:p.logs,stats:{total:p.logs.length}}});
     if(m.action==='GET_RULE_HISTORY')return done({success:true,data:p.history||[]});
-    if(m.action==='EXPORT_LOGS')return done({success:true,data:{text:'Unroute test log'}});
+    if(m.action==='EXPORT_LOGS')return done({success:true,data:{text:'Unroute test log',count:1}});
     if(m.action==='GET_DOMAIN_LISTS')return done({success:true,data:summary()});
     if(m.action==='GET_DOMAIN_LIST')return done({success:true,data:{list:structuredClone(p.lists.find(l=>l.id===m.listId)),revision:p.revision,proxyCatalog:p.catalog}});
     if(m.action==='GET_EXCEPTIONS')return done({success:true,data:{exceptions:{'manual.test':true},pacBypassDomains:[],whitelist:[],revision:p.revision,proxyCatalog:p.catalog,defaultProxyId:'p1'}});
@@ -40,7 +40,7 @@ async function scenario(name, run) {
     if(m.action==='CLEAR_PAC'){p.sync.currentPacProviderKey='none';return done({success:true,data:{...p.sync}});}
     if(m.action==='INSTALL_PAC'){p.sync.currentPacProviderKey=m.key;p.sync.customPacUrl=m.customPacUrl;return done({success:true,data:{...p.sync}});}
     done({success:true,data:{}});
-   }},storage:{local:{get:(_keys,done)=>done({})},onChanged:{addListener(){}}}};
+   }},storage:{local:{get:(_keys,done)=>done({})},onChanged:{addListener(listener){p.storageChanged=listener;}}}};
    await import('./app.js');
   });
   await page.waitForFunction(()=>proof.messages.some(m=>m.action==='GET_DOMAIN_LISTS'));
@@ -67,6 +67,83 @@ try {
    await input(page,'#customPacUrlInput',url);await click(page,'#saveCustomPacUrlBtn');
    assert.equal(await page.evaluate(()=>proof.messages.filter(m=>m.action==='INSTALL_PAC').at(-1).customPacUrl),url);
   }
+ });
+ await scenario('open proxy editor retains focus and selection on health refresh',async page=>{
+  await page.evaluate(()=>{
+   proof.mods.customProxyStringRaw='HTTP one.test:8080';
+   proof.mods.proxyCatalog=[{id:'p1',name:'First',endpoint:'HTTP one.test:8080',enabled:true}];
+   window.dispatchEvent(new Event('focus'));
+  });
+  await click(page,'[data-tab="proxies"]');
+  await page.waitForSelector('.edit-proxy-btn:enabled',{timeout:3000});
+  await click(page,'.edit-proxy-btn');
+  await page.$eval('.proxy-connection-editor [name=name]',e=>{
+   e.focus(); e.setSelectionRange(1,3); proof.editorInput=e;
+   proof.proxyHealthMap={'HTTP one.test:8080':{ok:true,latency:123,checkedAt:Date.now()}};
+   window.dispatchEvent(new Event('focus'));
+  });
+  await page.waitForFunction(()=>document.querySelector('.proxy-status-tag')?.textContent.includes('123'),{timeout:3000});
+  assert.equal(await page.evaluate(()=>document.activeElement===proof.editorInput && proof.editorInput.selectionStart===1 && proof.editorInput.selectionEnd===3),true);
+ });
+ await scenario('PAC dialog closes via Escape and restores focus',async page=>{
+  await click(page,'[data-tab="tools"]');
+  await page.click('#viewPacScriptBtn');
+  await page.waitForSelector('#pacScriptModal[open]');
+  assert.equal(await page.$eval('#pacScriptModal',e=>e.matches(':modal')),true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.$eval('#pacScriptModal',e=>e.open),false);
+  assert.equal(await page.$eval('#viewPacScriptBtn',e=>document.activeElement===e),true);
+ });
+ await scenario('missing proxy choices stay explicit',async page=>{
+  await page.evaluate(()=>{
+   Object.assign(proof.mods,{defaultProxyId:'missing-main',fallbackProxyId:'missing-backup'});
+   window.dispatchEvent(new Event('focus'));
+  });
+  await page.waitForFunction(()=>proof.messages.filter(m=>m.action==='GET_STATE').length>1,{timeout:3000});
+  for(const [id,value] of [['defaultProxySelect','missing-main'],['proxyFailoverSelect','missing-backup']]) {
+   assert.deepEqual(await page.$eval('#'+id,e=>[e.value,e.selectedOptions[0]?.disabled]),[value,true]);
+  }
+ });
+ await scenario('credential fields use credential-specific autofill hints',async page=>{
+  assert.equal(await page.$eval('#proxyUser',e=>e.autocomplete),'off');
+  assert.equal(await page.$eval('#proxyPass',e=>e.autocomplete),'new-password');
+ });
+ await scenario('external deletion removes the active scoped editor',async page=>{
+  await click(page,'[data-open="a"]');
+  await page.waitForSelector('[data-list-scope="a"]');
+  await page.evaluate(()=>{
+   proof.lists=proof.lists.filter(list=>list.id!=='a');
+   proof.revision++;
+   window.dispatchEvent(new Event('focus'));
+  });
+  await page.waitForFunction(()=>!document.querySelector('[data-list-scope="a"]'),{timeout:3000});
+  assert.equal(await page.$eval('#domainListsOverview',e=>e.hidden),false);
+ });
+ await scenario('reset restores diagnostic and proxy add controls',async page=>{
+  await click(page,'[data-tab="tools"]');
+  await page.evaluate(()=>{proof.hold='TEST_CONNECTION';});
+  await click(page,'#testConnBtn');
+  await page.waitForFunction(()=>proof.held.length===1);
+  await page.evaluate(()=>{
+   document.querySelector('#proxyProtocol').value='HTTPS';
+   const auth=document.querySelector('#proxyAuthCheck');
+   auth.checked=true;auth.dispatchEvent(new Event('change'));
+   proof.hold='GET_DOMAIN_LISTS';
+  });
+  await click(page,'#resetSettingsBtn');
+  await page.waitForFunction(()=>proof.held.some(entry=>entry.m.action==='GET_DOMAIN_LISTS'));
+  await page.evaluate(()=>{
+   proof.hold=null;
+   proof.storageChanged({'pac-kitchen-mods':{oldValue:{_revision:1}}},'local');
+   proof.held.find(entry=>entry.m.action==='GET_DOMAIN_LISTS').done({success:true,data:{lists:[],revision:proof.revision,proxyCatalog:[]}});
+  });
+  await page.waitForFunction(()=>!document.querySelector('#resetSettingsBtn').disabled);
+  assert.equal(await page.$eval('#domainListsRetry',e=>e.hidden),true,'reset storage event must not cancel its own readback');
+  await page.evaluate(()=>proof.held[0].done({success:true,latency:42}));
+  assert.deepEqual(await page.evaluate(()=>[document.querySelector('#testConnBtn').disabled,
+   document.querySelector('#connResult').textContent,document.querySelector('#proxyProtocol').selectedIndex,
+   document.querySelector('#proxyAuthCheck').checked,document.querySelector('#proxyAuthFields').style.display]),
+   [false,'',0,false,'none']);
  });
  await scenario('scoped IDs unique after deletion',async page=>{
   for(const id of ['a','b']) {
@@ -126,6 +203,45 @@ try {
   });
   assert.match(download,/^unroute-logs-\d{4}-\d{2}-\d{2}\.txt$/);
  });
+ await scenario('log controls share filters and render 150 entries in one list mutation',async page=>{
+  const result=await page.evaluate(async()=>{
+   const list=document.getElementById('logsContainer');
+   proof.logs=Array.from({length:150},(_,i)=>({title:`Entry ${i}`,level:'warn',category:'rules',timestamp:Date.now(),details:{i}}));
+   let mutations=0;
+   const measured=new MutationObserver(records=>{mutations+=records.length;});
+   measured.observe(list,{childList:true});
+   document.querySelector('[data-category="rules"]').click();
+   await new Promise(r=>setTimeout(r,0));
+   measured.disconnect();
+   const select=document.getElementById('logsLevelSelect');
+   select.value='warn';
+   select.dispatchEvent(new Event('change'));
+   const search=document.getElementById('logsSearchInput');
+   search.value='  Entry ';
+   search.dispatchEvent(new Event('input'));
+   const start=proof.messages.length;
+   const anchorClick=HTMLAnchorElement.prototype.click;
+   HTMLAnchorElement.prototype.click=()=>{};
+   try {
+    document.getElementById('refreshLogsBtn').click();
+    document.getElementById('copyLogsBtn').click();
+    document.getElementById('exportLogsBtn').click();
+    await new Promise(r=>setTimeout(r,0));
+   } finally {HTMLAnchorElement.prototype.click=anchorClick;}
+   const hint=list.querySelector('.log-expand-hint');
+   hint.click();
+   return {mutations, cards:list.childElementCount, selected:document.querySelector('[data-category="rules"]').getAttribute('aria-pressed'),
+    native:select instanceof HTMLSelectElement, named:Boolean(select.getAttribute('aria-label')),
+    help:hint.getAttribute('aria-description'), expanded:hint.getAttribute('aria-expanded'), messages:proof.messages.slice(start)};
+  });
+  assert.equal(result.mutations,1);
+  assert.equal(result.cards,150);
+  assert.equal(result.selected,'true');
+  assert.ok(result.native && result.named && result.help);
+  assert.equal(result.expanded,'true');
+  const filters={category:'rules',level:'warn',search:'Entry'};
+  assert.deepEqual(result.messages,[{action:'GET_LOGS',...filters,limit:150},{action:'EXPORT_LOGS',...filters},{action:'EXPORT_LOGS',...filters}]);
+ });
  await scenario('reset rejects stale raw-save readback and old log replies',async page=>{
   await input(page,'#customProxyText','HTTP stale.test:8080');
   await page.evaluate(()=>{proof.hold='GET_STATE';});
@@ -180,7 +296,7 @@ try {
    proof.mods.proxyCatalog=[{id:'p1',name:'Alpha',enabled:true,endpoint:'HTTP proxy.test:8080'}];
    window.dispatchEvent(new Event('focus'));
   });
-  await page.waitForSelector('.rename-proxy-btn');await click(page,'.rename-proxy-btn');
+  await page.waitForSelector('.edit-proxy-btn');await click(page,'.edit-proxy-btn');
   await input(page,'.proxy-profile-editor input','Discard me');
   await click(page,'#manualRulesLink');await page.waitForSelector('#manualSitesEditor .domain-name');
   await click(page,'#manualSitesEditor #modeToggleBtn');
@@ -269,6 +385,33 @@ try {
   await page.evaluate(()=>proof.held[0].done({success:true,data:[{id:'old',kind:'manual',count:1,at:Date.now()}]}));
   await new Promise(resolve=>setTimeout(resolve,30));
   assert.equal(await page.$$eval('#historyList .history-row',rows=>rows.length),0,'late history cannot restore old undo controls');
+ });
+ await scenario('raw site sections preserve equals signs in URLs and comments',async page=>{
+  await click(page,'#manualRulesLink');
+  await page.waitForSelector('#manualSitesEditor .domain-name');
+  await click(page,'#manualSitesEditor #modeToggleBtn');
+  await input(page,'#manualSitesEditor #rawTextEditor',
+   '# list = main\r\nhttps://query.test/?a=1\r\nnext.test\r\n ==== \r\ndirect.test\r\n====\r\nallowed.test');
+  await page.waitForFunction(()=>proof.messages.some(m=>m.action==='SAVE_MODS' && m.mods.exceptions));
+  const mods=await page.evaluate(()=>proof.messages.find(m=>m.action==='SAVE_MODS' && m.mods.exceptions).mods);
+  assert.deepEqual(mods,{exceptions:{'query.test':true,'next.test':true,'direct.test':false},whitelist:['allowed.test']});
+ });
+ await scenario('late history clear does not reload history after settings reset',async page=>{
+  await page.evaluate(()=>{proof.hold='CLEAR_RULE_HISTORY';});
+  await click(page,'#clearHistoryBtn');
+  await page.waitForFunction(()=>proof.held.length===1);
+  await page.evaluate(()=>{proof.hold=null;});
+  await click(page,'#resetSettingsBtn');
+  await page.waitForFunction(()=>!document.getElementById('resetSettingsBtn').disabled);
+  const reads=()=>page.evaluate(()=>proof.messages.filter(m=>m.action==='GET_RULE_HISTORY').length);
+  const before=await reads();
+  const resetToast=await page.$eval('#toast',e=>e.textContent);
+  await page.evaluate(async()=>{
+   proof.held[0].done({success:true});
+   await new Promise(resolve=>setTimeout(resolve,0));
+  });
+  assert.equal(await reads(),before,'a stale clear must not trigger a new read');
+  assert.equal(await page.$eval('#toast',e=>e.textContent),resetToast,'a stale clear must not replace the reset notification');
  });
 } finally { await browser.close(); }
 if(failures.length)throw new Error(failures.join('\n'));

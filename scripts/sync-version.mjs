@@ -55,16 +55,8 @@ if (updateJson('src/firefox/manifest.json', (manifest) => {
 })) {
   changed.push('src/firefox/manifest.json');
 }
-// Reviewer source archives and clean source trees have no generated build yet.
-// Check/update generated manifests when present; the build creates them from src.
-for (const target of ['chromium', 'firefox']) {
-  const manifestPath = `dist/${target}/manifest.json`;
-  if (fs.existsSync(path.join(repoRoot, manifestPath)) && updateJson(manifestPath, (manifest) => {
-    manifest.version = canonical;
-  })) {
-    changed.push(manifestPath);
-  }
-}
+// Generated manifests belong to the build. Relabeling an old artifact here
+// would hide its stale version from the packaging check.
 
 const readmePath = 'README.md';
 const readme = read(readmePath);

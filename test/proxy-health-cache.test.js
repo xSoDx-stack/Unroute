@@ -98,4 +98,15 @@ describe('Proxy health cache', () => {
     expect(await saveProxyHealthResult('HTTP proxy.example:8080', { checking: true }, 123)).to.equal(null);
     expect(mockStorage[PROXY_HEALTH_CACHE_KEY]).to.equal(undefined);
   });
+  it('keeps authenticated checks transient and cleans legacy credential-bearing keys', async () => {
+    const proxy = 'HTTPS fixture:dummy@proxy.example:443';
+    mockStorage[PROXY_HEALTH_CACHE_KEY] = { [proxy]: { ok: true, checkedAt: 123 } };
+    expect(await loadProxyHealthCache([proxy])).to.deep.equal({});
+    expect(mockStorage[PROXY_HEALTH_CACHE_KEY]).to.deep.equal({});
+    await saveProxyHealthResult(proxy, { ok: true }, 456);
+    expect(await loadProxyHealthCache([proxy])).to.have.property(proxy);
+    expect(mockStorage[PROXY_HEALTH_CACHE_KEY]).to.deep.equal({});
+    await pruneProxyHealthCache([]);
+    expect(await loadProxyHealthCache([proxy])).to.deep.equal({});
+  });
 });

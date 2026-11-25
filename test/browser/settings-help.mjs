@@ -41,7 +41,7 @@ try {
      if (message.action === 'UNDO_RULE_CHANGE') {history[0].undoneAt=Date.now();data={restored:1,skipped:0};}
      if (message.action === 'GET_LOGS') data = {logs:[{timestamp:Date.now(),title:'Fixture',category:'network',details:{fixture:true}}],stats:{total:1}};
      if (message.action === 'GET_PAC_SCRIPT') data = {scriptKind:'preview',cookedPacData:'// fixture'};
-     if (message.action === 'RENAME_PROXY_PROFILE') profiles.find(p=>p.id===message.proxyId).name=message.name;
+     if (message.action === 'UPDATE_PROXY_PROFILE') profiles.find(p=>p.id===message.proxyId).name=message.name;
      cb({success:true,data:structuredClone(data)});
     }}
    };
@@ -51,6 +51,7 @@ try {
   await page.waitForSelector('#manualSitesEditor .domain-card', {visible:true});
   // This exhaustive scan deliberately includes disabled and currently hidden settings:
   // they become visible through navigation, expansion, auth, modal and retry states.
+  const sharedHelpKeys = new Set(['proxyFailoverHint', 'portable_settings_warning']);
   const coverage = async label => {
    const result = await page.evaluate(() => {
     const controls = [...document.querySelectorAll('button,input:not([type=file]):not([type=hidden]),select,textarea,summary,a[href],[role=button],[role=switch],[role=tab],.provider-card,.log-card:has(.log-details-block)')];
@@ -58,7 +59,7 @@ try {
    });
    assert.deepEqual(result.missing, [], `${lang} ${label}: controls without help`);
    assert.deepEqual(result.secrets, [], 'help must not interpolate credentials/endpoints');
-   const translated = new Set(Object.entries(catalog).filter(([key])=>key.startsWith('settings_help_')).map(([,entry])=>entry.message));
+   const translated = new Set(Object.entries(catalog).filter(([key])=>key.startsWith('settings_help_') || sharedHelpKeys.has(key)).map(([,entry])=>entry.message));
    assert.ok(result.titles.every(title=>translated.has(title)), `${lang}: every help text must come from this locale's catalog`);
    return result.count;
   };
@@ -89,7 +90,10 @@ try {
   await page.click('[data-tab=proxies]');
   await page.click('#proxyAuthCheck'); await coverage('authentication fields');
   await page.click('[data-tab=proxies]');
-  await page.click('.rename-proxy-btn'); await coverage('rename editor');
+  await page.click('.edit-proxy-btn'); await coverage('connection editor');
+  for (const [name, suffix] of Object.entries({ name:'name', protocol:'protocol', host:'host', port:'port', hasAuth:'auth', username:'user', password:'pass' })) {
+   assert.equal(await page.$eval(`.proxy-connection-editor [name=${name}]`, e=>e.getAttribute('aria-description')), catalog[`settings_help_proxy_${suffix}`].message);
+  }
   await page.$eval('.proxy-profile-editor input', e=>{e.value='Renamed';e.dispatchEvent(new Event('input'));});
   await page.click('.proxy-profile-editor button');
   await page.waitForFunction(()=>document.querySelector('.proxy-profile-name')?.textContent==='Renamed');
@@ -107,15 +111,17 @@ try {
   await page.$eval('#domainListContainer',e=>{e.scrollTop=e.scrollHeight;e.dispatchEvent(new Event('scroll'));});
   await page.waitForFunction(()=>document.querySelectorAll('.domain-card').length===205); await coverage('last chunk');
   await page.$eval('#searchDomainInput',e=>{e.value='site-001';e.dispatchEvent(new Event('input'));});
+  await page.waitForFunction(()=>document.querySelectorAll('.domain-card').length===1);
   await coverage('filtered rerender');
   await page.$eval('#searchDomainInput',e=>{e.value='';e.dispatchEvent(new Event('input'));});
+  await page.waitForFunction(()=>document.querySelectorAll('.domain-card').length>=100);
   await page.click('.domain-select');
   assert.equal(await page.$eval('#selectAllFiltered',e=>e.indeterminate),true); await coverage('tristate selection');
   await page.click('#clearSelection'); await coverage('deselected rerender');
   await page.click('[data-subtab=excluded]'); await coverage('direct list');
   await page.click('[data-subtab=whitelist]'); await coverage('allowlist');
   await page.click('#modeToggleBtn'); await coverage('raw editor');
-  assert.ok(await page.evaluate(()=>window.calls.some(m=>m.action==='RENAME_PROXY_PROFILE')));
+  assert.ok(await page.evaluate(()=>window.calls.some(m=>m.action==='UPDATE_PROXY_PROFILE')));
   assert.deepEqual(errors, [], 'no startup/render errors');
   console.log(`PASS ${lang}: ${initial} initial controls; full DOM help scan after profile/history/log/site rerenders, chunking, tristate, tabs, raw editor and modal (RPC fixtures).`);
   await page.close();

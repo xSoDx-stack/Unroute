@@ -39,7 +39,7 @@ try {
     if(operation.mode==='pac-bypass' && !p.pac.includes(operation.domain)) p.pac.push(operation.domain);
     if(operation.mode==='pac') p.pac=p.pac.filter(domain=>domain!==operation.domain);
    }
-   p.revision++; done({success:true,settingsState:{pending:false}});
+   p.revision++; done({success:true,data:{revision:p.revision},settingsState:{pending:false}});
   } } };
   const {initSitesEditor} = await import('./sites-editor.js');
   document.querySelector('#tab-exceptions').classList.add('active');
@@ -102,11 +102,33 @@ try {
  await page.waitForSelector('dialog[open]');await page.click('dialog .btn-primary');
  await page.waitForFunction(()=>window.proof.lists[0].domains.length===1 && window.proof.lists[0].domains[0]==='keep.test');
  await page.$eval(`${scoped} input[id$="searchDomainInput"]`,e=>{e.value='';e.dispatchEvent(new Event('input'));});
- await fs.rm(`${out}/proxied-domains.txt`,{force:true});
+ await fs.rm(`${out}/Meta.txt`,{force:true});
  await page.click(`${scoped} button[id$="exportFileBtn"]`);
  let exported;
- for(let attempt=0;attempt<100;attempt++) {try {exported=await fs.readFile(`${out}/proxied-domains.txt`,'utf8');break;}catch {await new Promise(resolve=>setTimeout(resolve,50));}}
+ for(let attempt=0;attempt<100;attempt++) {try {exported=await fs.readFile(`${out}/Meta.txt`,'utf8');break;}catch {await new Promise(resolve=>setTimeout(resolve,50));}}
  assert.equal(exported,'keep.test\n','actual browser download contains only the selected list, not manual/all-list rules');
+ await page.evaluate(()=>{window.proof.lists[0].name='Meta renamed';window.proof.revision++;});
+ await fs.rm(`${out}/Meta renamed.txt`,{force:true});
+ await page.click(`${scoped} button[id$="exportFileBtn"]`);
+ let renamedExport;
+ for(let attempt=0;attempt<100;attempt++) {try {renamedExport=await fs.readFile(`${out}/Meta renamed.txt`,'utf8');break;}catch {await new Promise(resolve=>setTimeout(resolve,50));}}
+ assert.equal(renamedExport,'keep.test\n','export reads the latest saved title even before an external refresh');
+ await page.evaluate(async()=>{window.proof.lists[0].name='Meta';window.proof.revision++;await window.proof.editor.refresh();});
+ await page.evaluate(()=>{
+  const send=chrome.runtime.sendMessage, create=URL.createObjectURL;
+  window.proof.exportBlobs=0;
+  URL.createObjectURL=(...args)=>{window.proof.exportBlobs++;return create(...args);};
+  chrome.runtime.sendMessage=(message,done)=>{
+   if(message.action==='GET_DOMAIN_LIST') {window.proof.exportReply=()=>send(message,done);return;}
+   return send(message,done);
+  };
+  window.proof.restoreExport=()=>{chrome.runtime.sendMessage=send;URL.createObjectURL=create;};
+ });
+ await page.click(`${scoped} button[id$="exportFileBtn"]`);
+ assert.equal(await page.evaluate(()=>typeof window.proof.exportReply),'function');
+ await page.evaluate(async()=>{window.proof.editor.invalidate();window.proof.exportReply();await new Promise(resolve=>setTimeout(resolve,0));});
+ assert.equal(await page.evaluate(()=>window.proof.exportBlobs),0,'reset/invalidation cancels an export waiting for its fresh snapshot');
+ await page.evaluate(async()=>{window.proof.restoreExport();await window.proof.editor.refresh();});
  await page.click(`${scoped} button[id$="modeToggleBtn"]`);
  await page.waitForFunction(()=>document.querySelector('[data-list-scope="a"] textarea').offsetHeight>0);
  await page.$eval(`${scoped} textarea`,e=>{e.value='raw.test\n*.raw.test';e.dispatchEvent(new Event('input'));});
@@ -118,14 +140,27 @@ try {
  await page.waitForFunction(()=>window.proof.lists.length===3);
  assert.deepEqual(await page.evaluate(()=>window.proof.lists[2].domains),[]);
  await page.waitForFunction(()=>document.querySelector('#domainListForm').hidden);
- await page.click('#domainListImport'); await page.type('#domainListName','Imported');
- await upload('#domainListFile','https://import.test/path\n*.import.test\ninvalid row');
+ await page.click('#domainListImport');
+ await upload('#domainListFile','https://import.test/path\n*.import.test\ninvalid row','Imported.TXT');
  await page.waitForFunction(()=>!document.querySelector('#domainListSave').disabled);
+ assert.equal(await page.$eval('#domainListName',e=>e.value),'Imported','import name comes from the txt basename');
  assert.match(await page.$eval('#domainListPreview',e=>e.textContent),/2.*1/);
  await page.click('#domainListSave');
  await page.waitForFunction(()=>window.proof.lists.length===4);
  await page.waitForFunction(()=>document.querySelector('#domainListForm').hidden);
  assert.deepEqual(await page.evaluate(()=>window.proof.lists[3].domains),['import.test','*.import.test']);
+ assert.equal(await page.evaluate(()=>window.proof.lists[3].name),'Imported');
+ await page.click('#domainListImport'); await upload('#domainListFile','again.test','imported.txt');
+ await page.waitForFunction(()=>!document.querySelector('#domainListSave').disabled);
+ assert.equal(await page.$eval('#domainListName',e=>e.value),'imported (2)','duplicate file names get a free case-insensitive suffix');
+ await page.click('#domainListCancel');
+ await page.click('#domainListAdd'); await page.type('#domainListName','Ｍｅｔａ');
+ const beforeDuplicate=await page.evaluate(()=>window.proof.messages.filter(m=>m.action==='SAVE_DOMAIN_LIST').length);
+ await page.click('#domainListSave');
+ assert.equal(await page.$eval('#domainListForm',e=>e.hidden),false,'duplicate manual name retains the form');
+ assert.match(await page.$eval('#domainListPreview',e=>e.textContent),/уже существует/);
+ assert.equal(await page.evaluate(()=>window.proof.messages.filter(m=>m.action==='SAVE_DOMAIN_LIST').length),beforeDuplicate,'duplicate names are blocked before RPC');
+ await page.click('#domainListCancel');
  await page.click('[data-list-id="b"] input[type=checkbox]');
  await page.waitForFunction(()=>window.proof.lists[1].enabled);
  assert.equal(await page.$eval('[data-list-id="b"] select',e=>e.value),'missing:id','toggling retains missing proxy ID');
@@ -180,6 +215,58 @@ try {
  await page.evaluate(()=>{window.proof.fail=null;}); await page.click('#domainListsRetry');
  await page.waitForFunction(()=>document.querySelector('#domainListForm').hidden);
  assert.equal(await page.evaluate(()=>window.proof.messages.filter(m=>m.action==='SAVE_DOMAIN_LIST' && !m.listId).length-window.proof.beforeCreate),1,'readback retry never duplicates creation');
+ // A mismatched readback at the acknowledged revision must not discard a draft.
+ await page.evaluate(()=>{
+  const send=chrome.runtime.sendMessage;
+  chrome.runtime.sendMessage=(message,done)=>send(message,response=>{
+   if (message.action==='GET_DOMAIN_LIST' && message.listId==='a' && response.success) response.data.list.name='Readback mismatch';
+   done(response);
+  });
+  window.proof.restoreReadback=()=>{chrome.runtime.sendMessage=send;};
+ });
+ await page.click('[data-list-id="a"] .domain-list-actions button:nth-child(3)');
+ await page.$eval('#domainListName',e=>{e.value='Confirmed rename';});
+ await page.click('#domainListSave');
+ const canRetry = ()=>{const retry=document.querySelector('#domainListsRetry');return !retry.hidden && !retry.disabled;};
+ await page.waitForFunction(canRetry);
+ await page.click('#domainListsRetry');
+ await page.waitForFunction(()=>!document.querySelector('#domainListsRetry').disabled);
+ assert.equal(await page.$eval('#domainListForm',e=>e.hidden),false,'same revision mismatch preserves the draft');
+ assert.equal(await page.$eval('#domainListName',e=>e.value),'Confirmed rename');
+ await page.evaluate(()=>window.proof.restoreReadback());
+ await page.click('#domainListsRetry');
+ await page.waitForFunction(()=>document.querySelector('#domainListForm').hidden);
+ // Simulate a second writer between acknowledgement and the readback.
+ for (const action of ['SAVE_DOMAIN_LIST', 'REORDER_DOMAIN_LISTS']) {
+  await page.evaluate(action=>{
+   const send=chrome.runtime.sendMessage, p=window.proof;
+   p.beforeConcurrent=p.messages.length;
+   chrome.runtime.sendMessage=(message,done)=>send(message,response=>{
+    if (message.action===action && response.success) {
+     chrome.runtime.sendMessage=send;
+     if (action==='SAVE_DOMAIN_LIST') p.lists.find(l=>l.id==='a').name='External rename';
+     else p.lists.reverse();
+     p.revision++;
+    }
+    done(response);
+   });
+  },action);
+  if (action==='SAVE_DOMAIN_LIST') {
+   await page.click('[data-list-id="a"] .domain-list-actions button:nth-child(3)');
+   await page.$eval('#domainListName',e=>{e.value='Local rename';});
+   await page.click('#domainListSave');
+  } else {
+   await page.click('.domain-list-row:first-child button[data-move="1"]');
+  }
+  await page.waitForFunction(()=>{const retry=document.querySelector('#domainListsRetry');return !retry.hidden && !retry.disabled;});
+  await page.click('#domainListsRetry');
+  assert.equal(await page.$eval('#domainListsRetry',e=>e.hidden),true,`${action}: Retry accepts newer saved state instead of remaining blocked`);
+  assert.equal(await page.$eval('#domainListAdd',e=>e.disabled),false);
+  assert.equal(await page.$eval('#domainListForm',e=>e.hidden),true,'acknowledged form write cannot be replayed');
+  assert.equal(await page.$eval('[data-open="a"]',e=>e.textContent),'External rename');
+  assert.deepEqual(await page.$$eval('.domain-list-row',es=>es.map(e=>e.dataset.listId)),await page.evaluate(()=>window.proof.lists.map(l=>l.id)));
+  assert.equal(await page.evaluate(action=>window.proof.messages.slice(window.proof.beforeConcurrent).filter(m=>m.action===action).length,action),1,'Retry sends no second mutation');
+ }
  await page.click('#manualRulesLink'); await page.waitForSelector('#manualSitesEditor #rawTextEditor',{visible:true});
  assert.equal(await page.$eval('#manualSitesEditor #rawTextEditor',e=>e.value),'raw-bypass.test','manual raw cache survives list rename/delete/create');
  await page.click('#manualSitesEditor #modeToggleBtn');

@@ -8,9 +8,9 @@ describe('options 01 fidelity structure', () => {
  it('preserves the complete functional control surface', () => {
   for (const id of ['applicationBanner','extVersion','headerStatus','statusText','syncBtn','syncDate','syncBtnIcon','customPacUrlBox','customPacUrlInput','saveCustomPacUrlBtn','proxyProtocol','proxyHost','proxyPort','proxyUser','proxyPass','proxyAuthCheck','proxyAuthFields','torToggle','warpToggle','ownOnlyToggle','httpsOnlyToggle','secureProxiesOnlyToggle','prohibitDnsToggle','proxyOrDieToggle','moreDomainsToggle','notifPacErrorToggle','notifExtErrorToggle','notifNoControlToggle','newDomainInput','sourceFilter','rawTextEditor','fileImportInput','importFileBtn','exportFileBtn','modeToggleBtn','saveStatusText','retrySitesLoad','includedCount','excludedCount','whitelistCount','searchDomainInput','clearListBtn','historyList','clearHistoryBtn','logsContainer','logsFilterGroup','logsSearchInput','refreshLogsBtn','copyLogsBtn','exportLogsBtn','clearLogsBtn','testConnBtn','viewPacScriptBtn','resetSettingsBtn','pacScriptModal','pacScriptContent','closePacModalBtn','toast']) assert.ok(html.includes(`id="${id}"`), id);
  });
- it('uses the complete 01 navigation order plus user-requested appearance', () => {
+ it('keeps the settings navigation complete with Information last', () => {
   const nav = html.match(/<nav class="nav-tabs"[\s\S]*?<\/nav>/)[0];
-  assert.deepEqual([...nav.matchAll(/data-tab="([^"]+)"/g)].map(m => m[1]), ['pac','exceptions','proxies','mods','logs','history','tools','notifications','appearance']);
+  assert.deepEqual([...nav.matchAll(/data-tab="([^"]+)"/g)].map(m => m[1]), ['pac','exceptions','proxies','mods','logs','history','tools','appearance','notifications']);
   assert.ok(nav.indexOf('nav-separator') > nav.indexOf('data-tab="mods"'));
   assert.ok(!nav.includes('id="extVersion"'), 'version is below navigation, in the statusbar');
  });

@@ -6,12 +6,17 @@ import { storage } from '../src/common/core/storage.js';
 import { pacKitchen } from '../src/common/core/pac-kitchen.js';
 import { httpLib } from '../src/common/core/http-lib.js';
 import { errorHandlers } from '../src/common/core/error-handlers.js';
+import { applicationState } from '../src/common/core/application-state.js';
+import { ipToHost } from '../src/common/core/ip-to-host.js';
+import { logger } from '../src/common/core/logger.js';
+import { validatePacScriptSource } from '../src/common/core/pac-validator.js';
+import { Parser } from '../src/common/vendor/acorn.mjs';
 
 let mockStorage = {};
 let appliedProxyConfigs = [];
 let downloadedUrls = [];
 
-globalThis.chrome = {
+const createChromeMock = () => ({
   runtime: { lastError: null },
   action: {
     setIcon: () => {},
@@ -63,9 +68,10 @@ globalThis.chrome = {
       },
     },
   },
-};
+});
 
 describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
+  let originalChrome;
   let originalDownload;
   let originalHttpLibGet;
   let originalApplyPacData;
@@ -75,26 +81,8 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
     mockStorage = {};
     appliedProxyConfigs = [];
     downloadedUrls = [];
-    globalThis.chrome.proxy = {
-      settings: {
-        get: (opts, cb) => {
-          if (cb) {
-            cb({
-              levelOfControl: 'controlled_by_this_extension',
-              value: appliedProxyConfigs[appliedProxyConfigs.length - 1] || {},
-            });
-          }
-        },
-        set: (opts, cb) => {
-          appliedProxyConfigs.push(opts.value);
-          if (cb) cb();
-        },
-        clear: (opts, cb) => {
-          appliedProxyConfigs.push({ mode: 'direct' });
-          if (cb) cb();
-        },
-      },
-    };
+    originalChrome = globalThis.chrome;
+    globalThis.chrome = createChromeMock();
     pacSync.resetRuntimeState();
     await storage.clear();
 
@@ -105,12 +93,89 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
     httpLib.get = async () => 'function FindProxyForURL(url, host) { return "DIRECT"; }';
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await logger.savePromise;
+    globalThis.chrome = originalChrome;
     pacSync.downloadPacFromProvider = originalDownload;
     pacSync.applyPacData = originalApplyPacData;
     storage.set = originalStorageSet;
     httpLib.get = originalHttpLibGet;
   });
+  for (const action of ['clear', 'reset']) it(`releases the PAC validation cache on ${action}`, async () => {
+    const source = `// ${action} cache lifecycle\nfunction FindProxyForURL() { return 'DIRECT'; }`;
+    expect(validatePacScriptSource(source).valid).to.equal(true);
+    const parse = Parser.prototype.parse;
+    let parses = 0;
+    Parser.prototype.parse = function() { parses++; return parse.call(this); };
+    try {
+      if (action === 'clear') await pacSync.clearPac();
+      else pacSync.resetRuntimeState();
+      expect(validatePacScriptSource(source).valid).to.equal(true);
+      expect(parses).to.equal(1);
+    } finally {
+      Parser.prototype.parse = parse;
+    }
+  });
+
+  it('checks the periodic alarm once during cold initialization', async () => {
+    const original = pacSync.setupAlarms;
+    let checks = 0;
+    mockStorage.antiCensorRu = { currentPacProviderKey: 'none' };
+    pacSync.setupAlarms = () => { checks++; };
+    try {
+      await pacSync.init();
+      expect(checks).to.equal(1);
+    } finally { pacSync.setupAlarms = original; }
+  });
+
+  it('restores the committed PAC if a newer install fails after superseding the applied checkpoint', async () => {
+    const previous = 'function FindProxyForURL(){return "DIRECT";}';
+    const candidate = 'function FindProxyForURL(){return "PROXY candidate.test:443";}';
+    pacSync.downloadPacFromProvider = async () => previous;
+    await pacSync.installPac('onlyOwnSites');
+    const native = appliedProxyConfigs.at(-1);
+    const applied = applicationState.applied;
+    let entered, release;
+    const started = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    applicationState.applied = () => { entered(); return gate; };
+    pacSync.downloadPacFromProvider = async provider => {
+      if (provider.distinctKey === 'Anticensority') throw new Error('download failed');
+      return candidate;
+    };
+    try {
+      const first = pacSync.installPac('Антизапрет').catch(error => error);
+      await started;
+      expect(appliedProxyConfigs.at(-1).pacScript.data).to.include('candidate.test');
+      const replacement = pacSync.installPac('Антицензорити').catch(error => error);
+      release();
+      expect((await first).name).to.equal('SyncSupersededError');
+      expect((await replacement).message).to.include('download failed');
+      expect(appliedProxyConfigs.at(-1)).to.deep.equal(native);
+      expect(pacSync.rawPacData).to.equal(previous);
+      expect(pacSync.currentPacProviderKey).to.equal('onlyOwnSites');
+      expect(mockStorage.antiCensorRu.rawPacData).to.equal(previous);
+    } finally { release(); applicationState.applied = applied; }
+  });
+
+  it('skips derived state when the sync is cancelled during the applied checkpoint', async () => {
+    const applied = applicationState.applied;
+    const update = ipToHost.updateFromPac;
+    let updates = 0;
+    applicationState.applied = async () => { pacSync.cancelPendingSync(); };
+    ipToHost.updateFromPac = () => { ++updates; };
+    try {
+      const result = await pacSync.applyPacData('function FindProxyForURL(){return "DIRECT";}', {
+        expectedSyncGeneration: pacSync._syncGeneration,
+      }).catch(error => error);
+      expect(result?.name).to.equal('SyncSupersededError');
+      expect(updates).to.equal(0);
+    } finally {
+      applicationState.applied = applied;
+      ipToHost.updateFromPac = update;
+    }
+  });
+
   it('does not reinstall an owned identical PAC, but restores changed native settings and mandatory mode', async () => {
     const source = 'function FindProxyForURL(){return "DIRECT";}';
     await pacSync.applyPacData(source);
@@ -159,6 +224,25 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
       expect(pacSync.currentPacProviderKey).to.equal('none');
       expect(appliedProxyConfigs).to.deep.equal([{ mode: 'direct' }]);
     } finally { pacKitchen.getPacMods = originalGet; }
+  });
+
+  it('restores the native setting when reapplying the disabled provider is cancelled during clear', async () => {
+    const previous = { mode: 'fixed_servers', rules: { singleProxy: { host: 'proxy.test', port: 8080 } } };
+    appliedProxyConfigs.push(previous);
+    pacSync.currentPacProviderKey = 'none';
+    const clear = chrome.proxy.settings.clear;
+    let release;
+    const started = new Promise(resolve => {
+      chrome.proxy.settings.clear = (options, callback) => {
+        clear(options, () => { release = callback; resolve(); });
+      };
+    });
+    const reapply = pacSync.reapplyCurrentPac();
+    await started;
+    pacSync.cancelPendingSync();
+    release();
+    await reapply;
+    expect(appliedProxyConfigs.at(-1)).to.deep.equal(previous);
   });
 
   it('1. Sync A is running -> request B arrives -> B executes after A and becomes the final state', async () => {
@@ -272,6 +356,24 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
     expect(freshnessWrites).to.equal(1);
     expect(freshnessState.sourceKey).to.equal('Антизапрет');
     expect(freshnessState.lastPacUpdateStamp).to.equal(pacSync.lastPacUpdateStamp);
+  });
+
+  it('does not publish freshness after runtime reset invalidates its pending write', async () => {
+    await pacSync.installPac('onlyOwnSites');
+    let entered, release;
+    const started = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    storage.set = async (key, value) => {
+      if (key === 'antiCensorPacFreshness') { entered(); await gate; }
+      return originalStorageSet.call(storage, key, value);
+    };
+    const sync = pacSync.syncWithPacProvider().catch(error => error);
+    await started;
+    pacSync.resetRuntimeState();
+    release();
+    expect(await sync).to.have.property('name', 'SyncSupersededError');
+    expect(pacSync.lastPacUpdateStamp).to.equal(0);
+    expect(pacSync.providerUpdateStamps).to.deep.equal({});
   });
 
   it('reapplies unchanged PAC data when the active proxy setting was lost', async () => {
@@ -485,6 +587,20 @@ describe('PAC Sync: Pending Request Queue & Concurrency (Item 1)', () => {
     expect(extensionControlsProxy).to.equal(true);
     expect(appliedProxyConfigs[appliedProxyConfigs.length - 1].pacScript.data)
       .to.include('recover.example:443');
+  });
+
+  it('does not overwrite control state when an older reconcile read finishes last', async () => {
+    await pacSync.installPac('onlyOwnSites');
+    const get = chrome.proxy.settings.get;
+    let finishRead;
+    chrome.proxy.settings.get = (_options, callback) => { finishRead = callback; };
+    const stale = pacSync.reconcileProxyState();
+    chrome.proxy.settings.get = get;
+    await pacSync.reconcileProxyState();
+    finishRead({ levelOfControl: 'controlled_by_other_extensions', value: { mode: 'system' } });
+    expect(await stale).to.equal(false);
+    expect(pacSync.getState()).to.include({ isControlled: true, levelOfControl: 'controlled_by_this_extension' });
+    expect(pacSync.isExpectedPacApplied).to.equal(true);
   });
 
   it('confirms a transient ownership conflict before warning and restores PAC', async () => {

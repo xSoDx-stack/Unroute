@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 const read = name => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8');
-const source = name => read(`src/common/${name}`).replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+const source = name => read(`src/common/${name}`).replace(/^import .*;\r?\n/gm, '').replace(/^export \{[^}]*\} from .*;\r?\n/gm, '').replace(/^export /gm, '');
 const executablePath = process.env.CHROME_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(existsSync);
 assert.ok(executablePath, 'Set CHROME_PATH to run focused DOM checks');
 const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox'] });
@@ -60,9 +60,13 @@ try {
       return {success:true,data:{rulesRevision:snapshot.revision,added:1,changed:0,unchanged:0}};
     }
     ${source('core/domain-rules.js')}
+    ${source('core/domain-lists.js')}
     ${source('pages/options/settings-help.js')}
+    ${source('pages/options/domain-cards-list.js')}
+    ${source('pages/options/domain-file-io.js')}
+    ${source('pages/options/domain-lists-editor.js')}
     ${source('pages/options/sites-editor.js')}
-    const editor = initSitesEditor(document.getElementById('tab-exceptions'), {notify:text=>notices.push(text),onApplicationState:()=>{},navigate:()=>{}});
+    const editor = initDomainEditor(document.getElementById('manualSitesEditor'), {notify:text=>notices.push(text),onApplicationState:()=>{},navigate:()=>{}});
     document.getElementById('tab-exceptions').classList.add('active');
     window.testUI = { editor, messages, notices, snapshot, fail:value=>{failure=value;} };
   ` });
@@ -101,6 +105,16 @@ try {
   assert.equal(await page.evaluate(() => window.testUI.snapshot.domainProxyIds['domain-001.test']), 'custom:b');
   assert.equal(await page.evaluate(() => window.testUI.snapshot.domainProxyIds['import-a.test']), 'custom:a');
   assert.match(await page.evaluate(() => window.testUI.notices.at(-1)), /без изменений: 1/);
+  await page.click('.domain-select[data-domain="domain-001.test"]');
+  await page.click('#bulkWildcardBtn');
+  await page.waitForFunction(() => window.testUI.snapshot.exceptions['*.domain-001.test'] === true);
+  assert.equal(await page.evaluate(() => window.testUI.snapshot.exceptions['domain-001.test']), undefined);
+  assert.equal(await page.evaluate(() => window.testUI.snapshot.domainProxyIds['*.domain-001.test']), 'custom:b', 'wildcard toggle must preserve assigned proxy');
+  assert.equal(await page.$eval('.domain-select[data-domain="*.domain-001.test"]', e => e.checked), true, 'toggled domain stays selected');
+  await page.click('#bulkWildcardBtn');
+  await page.waitForFunction(() => window.testUI.snapshot.exceptions['domain-001.test'] === true);
+  assert.equal(await page.evaluate(() => window.testUI.snapshot.domainProxyIds['domain-001.test']), 'custom:b');
+  await page.click('#clearSelection');
   assert.equal(await page.evaluate(() => window.testUI.messages.some(m => m.action === 'SAVE_MODS')), false, 'normal edits must never replace a rule snapshot');
   await page.setViewport({ width: 360, height: 780 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'assignment controls must fit 360px');
@@ -126,6 +140,15 @@ try {
   await page.click('#rawRetrySave');
   await page.waitForFunction(() => document.getElementById('rawRetrySave').hidden);
   assert.equal(await page.evaluate(() => window.testUI.snapshot.exceptions['conflict-draft.test']), true);
+  await page.evaluate(() => {
+    const editor = document.getElementById('rawTextEditor');
+    editor.focus();
+    editor.setSelectionRange(0, 'conflict-draft.test'.length);
+  });
+  await page.click('#rawWildcardBtn');
+  assert.match(await page.$eval('#rawTextEditor', e => e.value), /^\*\.conflict-draft\.test/m);
+  assert.equal(await page.evaluate(() => window.testUI.editor.flush()), true);
+  assert.equal(await page.evaluate(() => window.testUI.snapshot.exceptions['*.conflict-draft.test']), true);
   const geometry = await page.evaluate(() => ({ sidebar: getComputedStyle(document.querySelector('body > .nav-tabs')).width, header: getComputedStyle(document.querySelector('.app-header')).height, columns: getComputedStyle(document.body).gridTemplateColumns }));
   assert.equal(geometry.header, '54px');
   assert.equal(geometry.sidebar, '164px');
@@ -143,10 +166,12 @@ try {
     const profiles = [{id:'custom:a',name:'Alpha',endpoint:'PROXY 127.0.0.1:8080'}, {id:'custom:b',name:'Beta',endpoint:'HTTPS proxy.test:443'}];
     let defaultId = 'custom:a';
     let failed = false;
+    let holdUpdate = false, releaseUpdate = null;
     const chrome = {tabs:{query:async()=>[]}};
     const requestBackground = async message => {
       calls.push(structuredClone(message));
-      if (message.action === 'RENAME_PROXY_PROFILE') {
+      if (message.action === 'UPDATE_PROXY_PROFILE') {
+        if (holdUpdate) await new Promise(resolve => { releaseUpdate = resolve; });
         if(failed) return {success:false,error:{code:'DUPLICATE_NAME',message:'Duplicate name'}};
         profiles.find(p=>p.id === message.proxyId).name = message.name;
       }
@@ -155,23 +180,46 @@ try {
       if (message.action === 'GET_EXCEPTIONS') return {success:true,data:{proxyCatalog:[...profiles.map(p=>({...p,enabled:true,builtin:false})),{id:'builtin:tor',name:'Tor',endpoint:'SOCKS5 127.0.0.1:9150',enabled:true,builtin:true}],defaultProxyId:defaultId}};
       return {success:true,data:{pacMods:{proxyProfiles:profiles,defaultProxyId:defaultId,ifUseLocalTor:true,customProxyStringRaw: profiles.map(p=>p.id === 'custom:a'?'HTTP user:secret@127.0.0.1:8080':p.endpoint).join(';')},syncState:{providers:{}},proxyHealthMap:{}}};
     };
+    ${source('core/web-host.js')}
     ${source('core/utils.js')}
     ${source('core/proxy-profiles.js')}
+    ${source('pages/options/proxy-connection-editor.js')}
+    ${source('pages/options/proxy-card-health.js')}
     ${source('pages/options/settings-help.js')}
+    ${source('pages/options/proxies-panel.js')}
+    ${source('pages/options/pac-panel.js')}
+    ${source('pages/options/preferences-panel.js')}
+    ${source('pages/options/diagnostics-panel.js')}
+    ${source('pages/options/navigation.js')}
+    ${source('pages/options/history-panel.js')}
+    ${source('pages/options/options-state.js')}
     ${source('pages/options/app.js').split("if (document.readyState === 'loading')")[0]}
     initElements();
     sitesEditor = { refresh:()=>{} };
-    window.proxyUI = { load:()=>loadState({preloadLogs:false}), calls, setup:setupEvents, fail:value=>{failed=value;} };
+    proxiesPanel = createProxiesPanel();
+    pacPanel = createPacPanel();
+    preferencesPanel = createPreferencesPanel();
+    window.proxyUI = { load:()=>refreshState(), calls, setup:setupEvents, fail:value=>{failed=value;},
+      hold:()=>{holdUpdate=true;}, isHeld:()=>Boolean(releaseUpdate), release:()=>{holdUpdate=false;releaseUpdate?.();releaseUpdate=null;} };
   ` });
   await proxiesPage.evaluate(() => window.proxyUI.load());
   assert.equal(await proxiesPage.$eval('#defaultProxySelect', e => [...e.options].some(o => o.value === 'builtin:tor')), true, 'catalog fallback must use the real RPC for built-in targets');
   assert.equal(await proxiesPage.$eval('#proxyCardsList', e => e.textContent.includes('secret')), false);
   await proxiesPage.evaluate(() => window.proxyUI.setup());
-  await proxiesPage.click('.rename-proxy-btn');
+  assert.equal(await proxiesPage.$$eval('.rename-proxy-btn', nodes => nodes.length), 0, 'name changes use the pencil, not a duplicate action');
+  assert.equal(await proxiesPage.$$eval('.edit-proxy-btn', nodes => nodes.length), 2, 'one pencil per custom proxy');
+  await proxiesPage.click('.edit-proxy-btn');
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), true, 'editing hides refresh, edit and delete for the active proxy');
+  assert.equal(await proxiesPage.$eval('.proxy-item:nth-child(2) .proxy-actions', node => node.hidden), false, 'other proxies remain available');
+  await proxiesPage.evaluate(() => window.proxyUI.load());
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), true, 'background refresh cannot restore actions during editing');
+  await proxiesPage.click('.proxy-editor-actions [type=button]');
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), false, 'cancel restores the row actions');
+  await proxiesPage.click('.edit-proxy-btn');
   await proxiesPage.$eval('.proxy-profile-editor input', e => { e.value = 'x'.repeat(33); e.dispatchEvent(new Event('input')); });
   assert.equal(await proxiesPage.$eval('.proxy-profile-editor input', e => e.checkValidity()), false, 'rename must reject a 33-character name before RPC');
   await proxiesPage.click('.proxy-profile-editor button');
-  assert.equal(await proxiesPage.evaluate(() => window.proxyUI.calls.some(call => call.action === 'RENAME_PROXY_PROFILE')), false);
+  assert.equal(await proxiesPage.evaluate(() => window.proxyUI.calls.some(call => call.action === 'UPDATE_PROXY_PROFILE')), false);
   await proxiesPage.$eval('#proxyName', e => { e.value = 'x'.repeat(33); e.dispatchEvent(new Event('input')); });
   assert.equal(await proxiesPage.$eval('#proxyName', e => e.checkValidity()), false, 'the add form uses the same name limit');
   await proxiesPage.$eval('#proxyName', e => { e.value = '😀'.repeat(32); e.dispatchEvent(new Event('input')); });
@@ -179,11 +227,18 @@ try {
   await proxiesPage.$eval('.proxy-profile-editor input', e => { e.value = 'Work'; e.dispatchEvent(new Event('input')); });
   await proxiesPage.evaluate(() => window.proxyUI.fail(true));
   await proxiesPage.click('.proxy-profile-editor button');
-  await proxiesPage.waitForSelector('.profile-error');
+  await proxiesPage.waitForFunction(() => document.querySelector('.proxy-connection-error')?.textContent.includes('Duplicate name'));
   assert.equal(await proxiesPage.$eval('.proxy-profile-editor input', e => e.value), 'Work', 'failed rename must retain its draft');
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), true, 'a rejected save keeps the editor and its actions hidden');
   await proxiesPage.evaluate(() => window.proxyUI.fail(false));
+  await proxiesPage.evaluate(() => window.proxyUI.hold());
   await proxiesPage.click('.proxy-profile-editor button');
+  await proxiesPage.waitForFunction(() => window.proxyUI.isHeld());
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), true, 'pending saves keep row actions hidden');
+  assert.equal(await proxiesPage.$eval('.proxy-connection-editor', node => node.disabled), true);
+  await proxiesPage.evaluate(() => window.proxyUI.release());
   await proxiesPage.waitForFunction(() => document.querySelector('.proxy-profile-name').textContent === 'Work');
+  assert.equal(await proxiesPage.$eval('.proxy-item .proxy-actions', node => node.hidden), false, 'a successful save restores the row actions');
   await proxiesPage.select('#defaultProxySelect', 'custom:b');
   await proxiesPage.waitForFunction(() => window.proxyUI.calls.some(m => m.action === 'SET_DEFAULT_PROXY'));
   await proxiesPage.click('.delete-btn');

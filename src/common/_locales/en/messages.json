@@ -1,6 +1,50 @@
 {
+  "proxyEditConnection": {"message": "Edit connection"},
+  "proxyConnectionName": {"message": "Name"},
+  "proxyConnectionProtocol": {"message": "Protocol"},
+  "proxyConnectionHost": {"message": "Host / IP address"},
+  "proxyConnectionPort": {"message": "Port"},
+  "proxyConnectionAuth": {"message": "Authentication"},
+  "proxyConnectionUsername": {"message": "Username"},
+  "proxyConnectionPassword": {"message": "Password"},
+  "proxyConnectionHint": {"message": "Site, list and reserve proxy assignments will be preserved. The browser does not support SOCKS authentication."},
+  "proxyConnectionSaving": {"message": "Saving…"},
+  "proxyConnectionSave": {"message": "Save"},
+  "proxyConnectionCancel": {"message": "Cancel"},
+  "proxyConnectionInvalidName": {"message": "The name must contain 1–32 characters."},
+  "proxyConnectionSocksAuth": {"message": "The browser does not support SOCKS authentication."},
+  "proxyConnectionInvalidAddress": {"message": "Check the proxy address and port (1–65535)."},
+  "proxyConnectionSaveFailed": {"message": "Could not save the connection. Check the settings and try again."},
+  "proxyConnectionInvalidSaved": {"message": "The saved proxy connection is invalid."},
+  "dlUnsupportedInclude": {"message": "include: is an unsupported geosite reference. Enter explicit domains; references are not expanded."},
+  "dlRawInvalid": {"message": "Not saved. Invalid lines: $1 (first: $2). Correct the highlighted lines."},
   "dlErrorInvalid": {"message": "Invalid domain list data. Check the name, domains and list order."},
+  "dlNameExists": {"message": "A list with this name already exists. Choose another name."},
+  "dlImportedName": {"message": "List"},
   "dlErrorUnknown": {"message": "The domain list no longer exists. Refresh the data and retry."},
+  "proxyFailoverLabel": {"message": "When a proxy is unavailable"},
+  "proxyFailoverSummary": {"message": "Only for your domains. Other traffic stays unchanged."},
+  "proxyFailoverHint": {"message": "Only requests assigned to the failed proxy change route; other rules stay unchanged. If the reserve also fails, the connection is blocked."},
+  "proxyFailoverBlock": {"message": "Block the connection"},
+  "proxyFailoverDirect": {"message": "DIRECT · without proxy protection"},
+  "proxyFailoverReserve": {"message": "Reserve proxy"},
+  "portableSettingsTitle": {"message": "Portable settings"},
+  "portableSettingsDescription": {"message": "All settings and domain lists in one JSON file."},
+  "portableSettingsExport": {"message": "Export"},
+  "portableSettingsImport": {"message": "Import"},
+  "portable_settings_warning": {"message": "Warning: this JSON is unencrypted and contains all proxy usernames and passwords. Do not publish it."},
+  "portable_settings_failed": {"message": "Operation failed. Check the settings file and try again."},
+  "portable_settings_exported": {"message": "Backup downloaded. Keep the password-bearing file in a safe place."},
+  "portable_settings_too_large": {"message": "The settings file is too large (maximum 64 MiB)."},
+  "portable_settings_replace_confirm": {"message": "Import replaces all current settings, proxies and lists. Unsaved drafts will be discarded. Continue?"},
+  "portable_settings_pending": {"message": "Settings saved; PAC application is pending a retry."},
+  "backup_error_invalid": {"message": "Invalid or unsupported settings file."},
+  "backup_error_export_failed": {"message": "Could not create a settings backup."},
+  "backup_error_import_failed": {"message": "Could not import settings."},
+  "backup_error_storage_failed": {"message": "Could not save the import. Previous settings were restored."},
+  "backup_error_rollback_failed": {"message": "Could not confirm settings restoration. Retry the import."},
+  "portable_settings_imported": {"message": "Settings restored and applied."},
+  "proxyFailoverDirectConfirm": {"message": "If the proxy fails, requests will connect directly and websites will see your IP address. Allow this?"},
   "dlBack": {"message": "← Sites"},
   "dlManual": {"message": "Manual rules"},
   "dlAdd": {"message": "Add list"},
@@ -40,10 +84,13 @@
   "mpErrorUnavailable": {"message": "Choose an enabled proxy allowed by the current restrictions."},
   "mpErrorReplacement": {"message": "Before deleting, choose a replacement for the assigned sites and the default setting."},
   "mpErrorConflict": {"message": "The list changed or is outdated. Refresh the data and retry; your draft is preserved."},
+  "mpErrorFailover": {"message": "Invalid fallback policy for sites using a custom proxy."},
+  "mpErrorResourceRevision": {"message": "Resource rules changed. Refresh the data and retry."},
+  "mpErrorResourceInheritance": {"message": "Route inheritance for this site is unavailable with the current settings."},
   "mpErrorChoice": {"message": "Choose a proxy for new sites."},
   "mpErrorRules": {"message": "Invalid site changes. Check the domains and routing modes."},
   "mpErrorMissingRule": {"message": "A site is no longer in the proxied list. Refresh the list."},
-  "mpRename": {"message": "Rename"},
+
   "mpReadbackFailed": {"message": "Saved · refresh the data"},
   "mpDeleteReplace": {"message": "Delete proxy · move sites to"},
   "mpChooseReplacement": {"message": "Choose a replacement explicitly"},
@@ -78,6 +125,7 @@
   "popupResourceOtherAuto": {"message": "An automatic global resource rule belonging to another site."},
   "popupResourcePac": {"message": "PAC determines the route; the resource has no separate manual rule."},
   "popupResourceReset": {"message": "Remove exception"},
+  "popupResourceList": {"message": "Domain list rule: $param_1$.", "placeholders": {"param_1": {"content": "$1"}}},
   "popupResourceResetHelp": {"message": "Only this exact host's manual rule is removed. Remaining wildcard rules are preserved; otherwise the site's resource setting applies."},
   "popupResourceResetSaved": {"message": "Exact rule reset. Reload the site to refresh connections."},
   "popupResourceInheritanceHelp": {"message": "Follow site: automatic resources inherit the main domain's route. No proxy: they connect directly. Manual exceptions are preserved."},
@@ -109,7 +157,7 @@
   "fidelity_route_resources_proxy": {"message": "Site and resources — via proxy"},
   "fidelity_route_resources_direct": {"message": "Site and resources — direct"},
   "fidelity_logs": {"message": "Log"},
-  "fidelity_check": {"message": "Connection check"},
+  "fidelity_check": {"message": "Tools"},
   "fidelity_information": {"message": "Information"},
   "fidelity_history": {"message": "History"},
   "fidelity_connection_intro": {"message": "Choose what determines the route for sites."},
@@ -222,14 +270,6 @@
   "msg_the_browser_reported_an_error_in_the_pac_scri_da596bbd": {
     "message": "The browser reported an error in the PAC script or proxy connection",
     "description": "User-visible text. Source: Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении"
-  },
-  "msg_pac_script_proxy_error_bbf4ab9f": {
-    "message": "PAC script / proxy error",
-    "description": "User-visible text. Source: Ошибка PAC-скрипта / Прокси"
-  },
-  "msg_the_proxy_server_reported_an_error_a84dd4de": {
-    "message": "The proxy server reported an error",
-    "description": "User-visible text. Source: Прокси-сервер сообщил об ошибке"
   },
   "msg_unexpected_extension_error_7188d268": {
     "message": "Unexpected extension error",
@@ -452,7 +492,7 @@
     "description": "User-visible text. Source: проксируй или умри!"
   },
   "msg_prevent_direct_connections_when_the_proxy_fai_3300e70c": {
-    "message": "Prevent direct connections when the proxy fails.",
+    "message": "Applies only to PAC scripts: prevents direct connections when a PAC proxy fails. Failover for your own proxies is configured separately.",
     "description": "User-visible text. Source: Запрещает прямое соединение без прокси в случаях, когда прокси отказывает."
   },
   "msg_use_pac_script_proxies_e9b3b8f2": {
@@ -669,15 +709,7 @@
     "message": "The PAC script is empty",
     "description": "User-visible text. Source: PAC-скрипт пуст"
   },
-  "msg_the_pac_script_contains_an_unmatched_characte_9e5e2c33": {
-    "message": "The PAC script contains an unmatched character: $param_1$",
-    "description": "User-visible text. Source: PAC-скрипт содержит несогласованный символ $SUB$",
-    "placeholders": {
-      "param_1": {
-        "content": "$1"
-      }
-    }
-  },
+
   "msg_the_pac_script_contains_a_syntax_error_sub_85eec82d": {
     "message": "The PAC script contains a syntax error: $param_1$",
     "description": "User-visible text. Source: PAC-скрипт содержит синтаксическую ошибку: $SUB$",
@@ -687,10 +719,7 @@
       }
     }
   },
-  "msg_the_pac_script_is_incomplete_unclosed_bracket_06ee6586": {
-    "message": "The PAC script is incomplete: unclosed brackets or blocks",
-    "description": "User-visible text. Source: PAC-скрипт оборван: не закрыты скобки или блоки"
-  },
+
   "msg_the_response_does_not_contain_an_executable_f_428979a2": {
     "message": "The response does not contain an executable FindProxyForURL function",
     "description": "User-visible text. Source: Ответ не содержит исполняемую функцию FindProxyForURL"
@@ -1432,14 +1461,7 @@
     "message": "Failed to copy to the clipboard",
     "description": "User-visible text. Source: Не удалось скопировать в буфер обмена"
   },
-  "msg_the_log_is_empty_nothing_to_copy_99cda969": {
-    "message": "The log is empty — nothing to copy",
-    "description": "User-visible text. Source: Логи пусты — нечего копировать"
-  },
-  "msg_the_log_is_empty_nothing_to_export_0e05bccf": {
-    "message": "The log is empty — nothing to export",
-    "description": "User-visible text. Source: Логи пусты — нечего экспортировать"
-  },
+
   "msg_log_file_exported_4f456a34": {
     "message": "✓ Log file exported!",
     "description": "User-visible text. Source: ✓ Файл логов успешно выгружен!"
@@ -1721,10 +1743,7 @@
     "message": "🛡️ No errors recorded",
     "description": "User-visible text. Source: 🛡️ Ошибок не зафиксировано"
   },
-  "msg_try_changing_the_category_or_clearing_the_sea_5ae7e689": {
-    "message": "Try changing the category or clearing the search",
-    "description": "User-visible text. Source: Попробуйте изменить категорию или очистить поисковый запрос"
-  },
+
   "msg_network_requests_proxies_and_pac_scripts_are__8ccd866d": {
     "message": "Network requests, proxies and PAC scripts are operating normally",
     "description": "User-visible text. Source: Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме"
@@ -1761,10 +1780,6 @@
         "content": "$1"
       }
     }
-  },
-  "msg_copy_this_entry_21bc6d3d": {
-    "message": "Copy this entry",
-    "description": "User-visible text. Source: Скопировать эту запись"
   },
   "msg_copy_this_log_entry_3c7795fa": {
     "message": "Copy this log entry",
@@ -2357,7 +2372,7 @@
     "description": "Static interface text or accessible attribute."
   },
   "msg_prevent_direct_connections_when_the_proxy_fai_d6445a44": {
-    "message": "Prevent direct connections when the proxy fails",
+    "message": "Applies only to PAC scripts: blocks direct connections when a PAC proxy fails",
     "description": "Static interface text or accessible attribute."
   },
   "msg_onion_i2p_and_opennic_domains_87d2d453": {
@@ -2430,18 +2445,12 @@
     "message": "Refresh the log",
     "description": "Static interface text or accessible attribute."
   },
-  "msg_copy_all_log_entries_to_the_clipboard_aa89a048": {
-    "message": "Copy all log entries to the clipboard",
-    "description": "Static interface text or accessible attribute."
-  },
+
   "msg_copy_1ecddf40": {
     "message": "Copy",
     "description": "Static interface text or accessible attribute."
   },
-  "msg_download_log_entries_as_a_text_file_5867f34f": {
-    "message": "Download log entries as a text file",
-    "description": "Static interface text or accessible attribute."
-  },
+
   "msg_export_d2ab5a1b": {
     "message": "Export",
     "description": "Static interface text or accessible attribute."
@@ -2460,7 +2469,7 @@
   },
 
   "msg_check_your_connection_and_reset_settings_9d9c231f": {
-    "message": "Check your connection and reset settings.",
+    "message": "Back up settings, check the connection, or restore defaults.",
     "description": "Static interface text or accessible attribute."
   },
   "msg_connection_check_f00dcb8e": {
@@ -2638,7 +2647,7 @@
   "settings_help_nav_mods": {"message": "Change PAC routing restrictions."},
   "settings_help_nav_logs": {"message": "Inspect network, PAC and proxy errors."},
   "settings_help_nav_history": {"message": "Review rule changes and undo eligible operations."},
-  "settings_help_nav_tools": {"message": "Open diagnostics, PAC source and settings reset."},
+  "settings_help_nav_tools": {"message": "Transfer settings, check the connection, inspect PAC source or restore defaults."},
   "settings_help_nav_notifications": {"message": "Choose error and proxy-control notifications."},
   "settings_help_nav_appearance": {"message": "Customize the interface theme and accent color."},
   "settings_help_provider_az": {"message": "Use Antizapret rules to route blocked sites."},
@@ -2713,7 +2722,9 @@
   "settings_help_proxy_add": {"message": "Check availability and save the new proxy."},
   "settings_help_proxy_check_all": {"message": "Check the configured proxies’ availability again."},
   "settings_help_proxy_check": {"message": "Check this proxy’s availability again."},
-  "settings_help_proxy_rename": {"message": "Open the name editor for this proxy."},
+  "settings_help_proxy_edit": {"message": "Open the connection editor without changing proxy assignments."},
+  "settings_help_proxy_connection_save": {"message": "Save changes to this proxy connection."},
+
   "settings_help_proxy_delete": {"message": "Choose a replacement and prepare to delete this proxy."},
   "settings_help_proxy_replace": {"message": "Choose the replacement proxy for dependent sites."},
   "settings_help_proxy_submit": {"message": "Apply the rename or deletion with the selected replacement."},
@@ -2727,7 +2738,7 @@
   "settings_help_https": {"message": "Do not route HTTP sites through a proxy."},
   "settings_help_secure": {"message": "Restrict the proxy chain to secure transports."},
   "settings_help_dns": {"message": "Prevent the PAC script from making DNS lookups."},
-  "settings_help_fail_closed": {"message": "Do not fall back to a direct connection when the proxy fails."},
+  "settings_help_fail_closed": {"message": "Blocks direct connections if a PAC script proxy or the PAC script itself fails. Failover for your own proxies is configured separately in the Proxies tab."},
   "settings_help_special": {"message": "Route special domain zones through a proxy."},
   "settings_help_notify_pac": {"message": "Show desktop notifications for PAC errors."},
   "settings_help_notify_ext": {"message": "Show desktop notifications for extension errors."},
@@ -2740,9 +2751,25 @@
   "settings_help_logs_system": {"message": "Show only system log entries."},
   "settings_help_logs_search": {"message": "Find log entries by error text, domain or URL."},
   "settings_help_logs_search_clear": {"message": "Clear the search query and show the category’s entries again."},
+  "logs_category_rules": {"message": "Rules"},
+  "logs_category_backup": {"message": "Backups"},
+  "logs_level_label": {"message": "Log severity"},
+  "logs_level_all": {"message": "All levels"},
+  "logs_refresh_failed": {"message": "Could not refresh the log"},
+  "logs_export_failed": {"message": "Could not prepare the log entries"},
+  "logs_no_matching_entries": {"message": "No entries match the selected filters"},
+  "logs_try_changing_filters": {"message": "Change the category or severity, or clear the search."},
+  "logOperationRulesFailed": {"message": "Could not change the routing rules"},
+  "logOperationSettingsFailed": {"message": "Could not apply the settings"},
+  "logOperationBackupFailed": {"message": "Could not complete the backup operation"},
+  "logOperationProxyFailed": {"message": "Could not change the proxy profile"},
+  "settings_help_logs_rules": {"message": "Show only routing rule events."},
+  "settings_help_logs_settings": {"message": "Show only settings events."},
+  "settings_help_logs_backup": {"message": "Show only backup events."},
+  "settings_help_logs_level": {"message": "Filter log entries by severity."},
   "settings_help_logs_refresh": {"message": "Read the latest log entries again."},
-  "settings_help_logs_copy": {"message": "Copy the log to the clipboard."},
-  "settings_help_logs_export": {"message": "Download the log as a text file."},
+  "settings_help_logs_copy_filtered": {"message": "Copy entries matching the selected filters to the clipboard."},
+  "settings_help_logs_export_filtered": {"message": "Download entries matching the selected filters as a text file."},
   "settings_help_logs_clear": {"message": "Delete saved log entries after confirmation."},
   "settings_help_log_copy": {"message": "Copy this log entry’s text and details."},
   "settings_help_log_expand": {"message": "Show or hide this entry’s details."},
@@ -2757,5 +2784,55 @@
   "settings_help_hex": {"message": "Set a custom accent color using #RGB or #RRGGBB."},
   "settings_help_appearance_retry": {"message": "Retry saving the chosen appearance in this browser."},
   "settings_help_apply_retry": {"message": "Retry applying the saved settings in the browser."},
-  "settings_help_private": {"message": "Open Firefox settings for permission to run in private windows."}
+  "settings_help_private": {"message": "Open Firefox settings for permission to run in private windows."},
+  "diag_proxy_named": {"message": "\"$1\" ($2)"},
+  "diag_pac_antizapret": {"message": "PAC \"Antizapret\""},
+  "diag_pac_anticensority": {"message": "PAC \"Anticensority\""},
+  "diag_pac_only_own": {"message": "Only your sites"},
+  "diag_pac_custom_host": {"message": "Custom PAC ($1)"},
+  "diag_pac_custom": {"message": "Custom PAC"},
+  "diag_proxy_local_tor": {"message": "Local Tor ($1)"},
+  "diag_proxy_local_warp": {"message": "Cloudflare WARP ($1)"},
+  "diag_proxy_deleted": {"message": "deleted proxy profile"},
+  "diag_proxy_assigned_unavailable": {"message": "assigned profile"},
+  "diag_rule_list_named": {"message": "list \"$1\" ($2)"},
+  "diag_rule_manual": {"message": "rule \"$1\""},
+  "diag_nav_blocked_assigned_title": {"message": "Blocked: proxy $1 is unavailable → $2"},
+  "diag_nav_blocked_assigned_msg": {"message": "Proxy $2 assigned to \"$1\" is disabled or filtered by encryption settings ($3)."},
+  "diag_nav_blocked_policy_title": {"message": "Blocked by fail-closed policy ($1) → $2"},
+  "diag_nav_blocked_policy_msg": {"message": "No eligible proxies remained for \"$1\" after filtering, and direct connections are blocked ($2)."},
+  "diag_nav_pac_endpoint_title": {"message": "$1 proxy failed ($2) → $3"},
+  "diag_nav_pac_endpoint_msg": {"message": "Could not open \"$1\" via $2 proxy ($3): $4. This does not mean the entire PAC is down."},
+  "diag_nav_own_endpoint_title": {"message": "Proxy $1 failed → $2"},
+  "diag_nav_own_endpoint_msg": {"message": "Could not open \"$1\" via proxy $2 ($3). Check this proxy in the Proxies tab."},
+  "diag_nav_own_with_reserve_title": {"message": "Primary and reserve proxies failed: $1 → $2"},
+  "diag_nav_own_with_reserve_msg": {"message": "Could not open \"$1\" ($2): both primary proxy $3 and reserve $4 failed ($5)."},
+  "diag_nav_assigned_msg": {"message": "Could not open \"$1\" ($2) via proxy $3 ($4). Check this proxy in the Proxies tab."},
+  "diag_nav_tor_msg": {"message": "Could not open \"$1\" via $2 ($3). Make sure your local Tor service is running."},
+  "diag_nav_pool_msg": {"message": "Could not open \"$1\" ($2) via configured proxies: $3 ($4)."},
+  "diag_nav_no_own_proxies_title": {"message": "Blocked: no active custom proxies → $1"},
+  "diag_nav_no_own_proxies_msg": {"message": "\"$1\" ($2) requires a custom proxy, but no eligible proxies are available ($3)."},
+  "diag_nav_own_and_pac_title": {"message": "Route failed (custom proxies + $1) → $2"},
+  "diag_nav_own_and_pac_msg": {"message": "Could not open \"$1\": neither your custom proxies ($2) nor $3 proxies responded ($4)."},
+  "diag_nav_pac_title": {"message": "$1 proxy failed → $2"},
+  "diag_nav_pac_msg": {"message": "An individual request to \"$1\" via $2 failed ($3). This does not mean the PAC proxy server is completely unavailable."},
+  "diag_browser_pac_err_code": {"message": "$1 error: $2"},
+  "diag_browser_pac_err": {"message": "$1 execution error"},
+  "diag_browser_pac_msg": {"message": "The browser reported an error loading or executing $1."},
+  "diag_browser_pac_proxy_err": {"message": "$1 proxy failed ($2): $3"},
+  "diag_browser_pac_proxy_msg": {"message": "The browser reported a connection failure with $1 proxy ($2)."},
+  "diag_browser_own_proxy_err": {"message": "Proxy $1 failed: $2"},
+  "diag_browser_own_proxy_msg": {"message": "The browser could not connect to proxy $1."},
+  "diag_browser_own_only_msg": {"message": "The browser reported a connection failure with your configured proxy ($1)."},
+  "diag_browser_pac_conn_err": {"message": "$1 proxy failed: $2"},
+  "diag_browser_pac_conn_msg": {"message": "The browser could not establish a connection to a proxy from $1."},
+  "diag_browser_mixed_err": {"message": "Proxy failure ($1 / custom proxies): $2"},
+  "diag_browser_mixed_msg": {"message": "The browser reported a proxy connection failure. Active routes: $1 and custom proxies ($2)."},
+  "diag_meta_proxy": {"message": "Proxy"},
+  "diag_meta_reserve": {"message": "Reserve"},
+  "diag_meta_site": {"message": "Site"},
+  "diag_meta_rule": {"message": "Rule"},
+  "sitesToggleWildcard": {"message": "± *."},
+  "settings_help_site_wildcard_bulk": {"message": "Add or remove the *. prefix on selected domains."},
+  "settings_help_site_wildcard_raw": {"message": "Add or remove the *. prefix on the current line or selected domains."}
 }

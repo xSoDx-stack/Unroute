@@ -57,13 +57,13 @@ export async function checkDomainListsNative({ proxyPort, secondProxyPort, probe
     const importList = async (name, proxyId, text) => {
       await wait(ready);
       get('domainListImport').click();
-      get('domainListName').value = name;
       get('domainListProxy').value = proxyId;
       const transfer = new DataTransfer();
-      transfer.items.add(new File([text], 'native-domains.txt', { type: 'text/plain' }));
+      transfer.items.add(new File([text], `${name}.txt`, { type: 'text/plain' }));
       get('domainListFile').files = transfer.files;
       get('domainListFile').dispatchEvent(new Event('change'));
       await wait(() => !get('domainListSave').disabled);
+      assert(get('domainListName').value === name, 'txt filename prepopulates the imported name');
       get('domainListSave').click();
       await wait(() => get('domainListForm').hidden && ready());
       const created = (await read()).lists.find(item => item.name === name);
@@ -106,7 +106,7 @@ export async function checkDomainListsNative({ proxyPort, secondProxyPort, probe
       clientX: start.left + start.width / 2, clientY: start.top + start.height / 2, bubbles: true, cancelable: true };
     handle.dispatchEvent(new PointerEvent('pointerdown', point));
     document.dispatchEvent(new PointerEvent('pointermove', { ...point, clientY: target.bottom - 3 }));
-    assert(get('domainListsRows').querySelector('.domain-list-row').dataset.listId === first, 'drag previews the new order');
+    await wait(() => get('domainListsRows').querySelector('.domain-list-row')?.dataset.listId === first);
     assert((await read()).lists[0].id === second, 'drag preview must not persist before release');
     document.dispatchEvent(new PointerEvent('pointerup', { ...point, buttons: 0, clientY: target.bottom - 3 }));
     await wait(async () => (await read()).lists[0].id === first && ready());

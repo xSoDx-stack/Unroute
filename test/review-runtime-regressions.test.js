@@ -100,7 +100,10 @@ describe('Review runtime regressions', () => {
 
   it('1.11 rejects arbitrary notification fields without writing and preserves every existing key', async () => {
     const originalSet = storage.set;
+    const listenersRegistered = errorHandlers._listenersRegistered;
+    const reads = [];
     let writes = 0;
+    chrome.storage = { local: { get: (key, callback) => { reads.push(key); callback({}); } } };
     storage.set = async () => { writes++; };
     errorHandlers.resetRuntimeState();
     try {
@@ -111,13 +114,19 @@ describe('Review runtime regressions', () => {
         expect(rejected, String(key)).to.equal(true);
       }
       expect(writes).to.equal(0);
+      expect(reads).to.deep.equal([]);
       expect(errorHandlers.notificationsEnabled).to.deep.equal(before);
       for (const key of Object.keys(before)) {
         await errorHandlers.setNotificationOption(key, false);
         expect(errorHandlers.notificationsEnabled[key]).to.equal(false);
       }
       expect(writes).to.equal(Object.keys(before).length);
-    } finally { storage.set = originalSet; errorHandlers.resetRuntimeState(); }
+      expect(reads).to.deep.equal(['handlers-state']);
+    } finally {
+      storage.set = originalSet;
+      errorHandlers.resetRuntimeState();
+      errorHandlers._listenersRegistered = listenersRegistered;
+    }
   });
 
   it('2.1 bounds fallback memory without evicting active retry limits and expires it by TTL', async () => {

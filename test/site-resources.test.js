@@ -1,5 +1,6 @@
 'use strict';
 
+import assert from 'node:assert/strict';
 import { expect } from 'chai';
 import { SiteResources, resourceHost } from '../src/common/core/site-resources.js';
 import { pacKitchen } from '../src/common/core/pac-kitchen.js';
@@ -12,6 +13,18 @@ import { encodeSettings, decodeSettings } from '../src/common/core/settings-code
 import { createPacModifiers } from '../src/common/core/pac-modifiers.js';
 
 describe('Whole-site resource routing', () => {
+  it('returns a summary without inheritance controls when no tab is supplied or the tab closes', async () => {
+    const requested = [];
+    chrome.tabs.get = (id, cb) => {
+      requested.push(id);
+      chrome.runtime.lastError = { message: 'Tab closed' };
+      try { cb(); } finally { delete chrome.runtime.lastError; }
+    };
+    expect((await tracker.summary(null, 'example.com')).canInheritResources).to.equal(false);
+    expect(requested).to.deep.equal([]);
+    expect((await tracker.summary(1, 'example.com')).canInheritResources).to.equal(false);
+    expect(requested).to.deep.equal([1]);
+  });
   let tracker;
   let mods;
   let updates;
@@ -218,6 +231,31 @@ describe('Whole-site resource routing', () => {
     expect(mods.domainProxyIds).to.deep.equal({});
   });
 
+  it('publishes the automatic reload diagnostic only after the rule write succeeds', async () => {
+    mods.exceptions['example.com'] = true;
+    await request('cdn.test');
+    const update = pacKitchen.updatePacMods;
+    let reloadWhileSaving;
+    pacKitchen.updatePacMods = async fn => {
+      await fn(mods);
+      reloadWhileSaving = (await tracker.summary(1, 'example.com')).needsReload;
+      throw new Error('Rule write failed');
+    };
+
+    await assert.rejects(tracker.flush(), /Rule write failed/);
+    expect(reloadWhileSaving).to.equal(false);
+    expect((await tracker.summary(1, 'example.com')).needsReload).to.equal(false);
+    expect(tracker.tabs.get(1).pending.has('cdn.test')).to.equal(true);
+    expect(applies).to.equal(0);
+
+    pacKitchen.updatePacMods = update;
+    await tracker.flush();
+    expect(mods.exceptions['cdn.test']).to.equal(true);
+    expect((await tracker.summary(1, 'example.com')).needsReload).to.equal(true);
+    expect(session['site-resource-tabs'][1].needsReload).to.equal(true);
+    expect(applies).to.equal(1);
+  });
+
   it('persists inherited IDs together with auto resource rules', async () => {
     mods.exceptions['example.com'] = true;
     mods.domainProxyIds = { 'example.com': 'custom:a' };
@@ -277,6 +315,22 @@ describe('Whole-site resource routing', () => {
     try { await tracker.setMode(1, 'example.com', true, 'custom:missing'); } catch (caught) { error = caught; }
     expect(error?.code).to.equal('PROXY_TARGET_UNAVAILABLE');
     expect(mods.exceptions).to.deep.equal({});
+  });
+
+  it('does not schedule a resource batch when local settings are cleared', async () => {
+    tracker.setup();
+    await request('cdn.test');
+    await tracker.flush();
+    await tracker.clear();
+    const revision = tracker.rulesRevision;
+    let schedules = 0;
+    tracker.schedule = () => { schedules++; };
+
+    await storageListener({ 'pac-kitchen-mods': { oldValue: mods } }, 'local');
+
+    expect(schedules).to.equal(0);
+    expect(tracker.rulesRevision).to.equal(revision);
+    expect(tracker.tabs.size).to.equal(0);
   });
 
   it('ignores profile rename/default-only storage updates', async () => {

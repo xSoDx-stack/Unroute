@@ -5,6 +5,7 @@ import { t } from './i18n.js';
 import { storage } from './storage.js';
 import { logger, sanitizeLogData, sanitizeLogString } from './logger.js';
 import { proxyBackend } from './proxy-backend.js';
+import { diagnoseBrowserProxyError } from './proxy-diagnostics.js';
 
 const HANDLERS_STATE_KEY = 'handlers-state';
 const LAST_ERRORS_MAX = 30;
@@ -38,6 +39,10 @@ function getControlLossMessage(levelOfControl) {
 }
 
 class ErrorHandlersManager {
+  #initPromise = null;
+  #stateQueue = Promise.resolve();
+  #generation = 0;
+
   constructor() {
     this.lastErrors = [];
     this.notificationsEnabled = {
@@ -50,14 +55,20 @@ class ErrorHandlersManager {
     this._noControlActive = false;
     this._lastProxyErrorSignature = '';
     this._lastProxyErrorAt = 0;
+    this._contextProvider = null;
   }
 
-  setupListeners() {
+  setDiagnosticContextProvider(provider) {
+    this._contextProvider = typeof provider === 'function' ? provider : null;
+  }
+
+  setupListeners(ensureReady = null) {
     if (this._listenersRegistered) return;
 
-    proxyBackend.addErrorListener((details) => {
-      this.handleProxyError(details);
-    });
+    const handleWhenReady = (handle) => ensureReady
+      ? ensureReady().then(handle).catch(error => console.warn('[Error Handlers] Failed to process diagnostic event:', error))
+      : handle();
+    proxyBackend.addErrorListener(details => handleWhenReady(() => this.handleProxyError(details)));
 
     if (chrome.notifications && chrome.notifications.onClicked &&
         (typeof chrome.notifications.onClicked.hasListeners !== 'function' || !chrome.notifications.onClicked.hasListeners())) {
@@ -68,21 +79,35 @@ class ErrorHandlersManager {
 
     if (typeof self !== 'undefined' && typeof self.addEventListener === 'function') {
       self.addEventListener('error', (event) => {
-        this.handleExtensionError(event.error || event.message || t("msg_unknown_error_2d55ddef", "Неизвестная ошибка"));
+        return handleWhenReady(() => this.handleExtensionError(event.error || event.message || t("msg_unknown_error_2d55ddef", "Неизвестная ошибка")));
       });
       self.addEventListener('unhandledrejection', (event) => {
-        this.handleExtensionError(event.reason || t("msg_unhandled_promise_rejection_9d88667c", "Необработанная ошибка Promise"));
+        return handleWhenReady(() => this.handleExtensionError(event.reason || t("msg_unhandled_promise_rejection_9d88667c", "Необработанная ошибка Promise")));
       });
     }
 
     this._listenersRegistered = true;
   }
 
-  async init() {
-    this.setupListeners();
-    if (this.isInitialized) return;
+  init() {
+    if (this.isInitialized) return Promise.resolve();
+    if (this.#initPromise) return this.#initPromise;
+    const generation = this.#generation;
+    this.#initPromise = this.#stateQueue.then(async () => {
+      if (generation !== this.#generation) return;
+      this.setupListeners();
+      const saved = await storage.get(HANDLERS_STATE_KEY, null);
+      if (generation !== this.#generation) return;
+      this.#restoreState(saved);
+      this.isInitialized = true;
+    }).catch(error => {
+      if (generation === this.#generation) this.#initPromise = null;
+      throw error;
+    });
+    return this.#initPromise;
+  }
 
-    const saved = await storage.get(HANDLERS_STATE_KEY, null);
+  #restoreState(saved) {
     if (saved && typeof saved === 'object') {
       const savedNotifications = saved.notificationsEnabled &&
         typeof saved.notificationsEnabled === 'object'
@@ -95,7 +120,17 @@ class ErrorHandlersManager {
       }
       this._noControlActive = saved.noControlActive === true;
     }
-    this.isInitialized = true;
+  }
+
+  #mutateState(mutate) {
+    const generation = this.#generation;
+    const ready = this.init();
+    const result = this.#stateQueue.then(async () => {
+      await ready;
+      if (generation === this.#generation) await mutate(generation);
+    });
+    this.#stateQueue = result.catch(() => {});
+    return result;
   }
 
   async _persistState() {
@@ -130,19 +165,32 @@ class ErrorHandlersManager {
     };
     this.addError(errItem);
 
+    let context = {};
+    try {
+      context = this._contextProvider ? (this._contextProvider() || {}) : {};
+    } catch {
+      context = {};
+    }
+    const diagnosed = diagnoseBrowserProxyError({
+      safeDetails,
+      mods: context.mods || null,
+      pacProviderKey: context.pacProviderKey || '',
+      customPacUrl: context.customPacUrl || '',
+    });
+
     logger.add({
       level: safeDetails.fatal ? 'error' : 'warn',
-      category: 'pac',
-      title: safeDetails.error || t("msg_pac_proxy_error_7dd6d59c", "Ошибка PAC / Proxy"),
-      message: safeDetails.details || t("msg_the_browser_reported_an_error_in_the_pac_scri_da596bbd", "Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении"),
-      details: safeDetails,
+      category: diagnosed.category,
+      title: diagnosed.title,
+      message: diagnosed.message,
+      details: diagnosed.details,
     });
 
     if (this.notificationsEnabled['pac-error']) {
       this.notify(
         'pac-error',
-        t("msg_pac_script_proxy_error_bbf4ab9f", "Ошибка PAC-скрипта / Прокси"),
-        safeDetails.details || safeDetails.error || t("msg_the_proxy_server_reported_an_error_a84dd4de", "Прокси-сервер сообщил об ошибке")
+        diagnosed.title,
+        diagnosed.message
       );
     }
   }
@@ -176,8 +224,10 @@ class ErrorHandlersManager {
     if (!NOTIFICATION_KEYS.includes(key)) {
       throw new TypeError('Invalid notification option');
     }
-    this.notificationsEnabled[key] = Boolean(enabled);
-    await this._persistState();
+    await this.#mutateState(() => {
+      this.notificationsEnabled[key] = Boolean(enabled);
+      return this._persistState();
+    });
   }
 
   handleExtensionError(error) {
@@ -206,7 +256,14 @@ class ErrorHandlersManager {
       expectedControl,
       levelOfControl,
     });
+    try {
+      await this.#mutateState(generation => this.#applyControlState(hasHardConflict, levelOfControl, generation));
+    } catch (error) {
+      console.warn('[Error Handlers] Failed to report proxy control state:', error);
+    }
+  }
 
+  async #applyControlState(hasHardConflict, levelOfControl, generation) {
     if (!hasHardConflict) {
       if (this._noControlActive) {
         this._noControlActive = false;
@@ -215,7 +272,7 @@ class ErrorHandlersManager {
         } catch (err) {
           console.warn('[Error Handlers] Failed to persist restored proxy control:', err);
         }
-        if (chrome.notifications?.clear) {
+        if (generation === this.#generation && chrome.notifications?.clear) {
           chrome.notifications.clear('no-control', () => {
             if (chrome.runtime.lastError) { /* ignore */ }
           });
@@ -232,6 +289,7 @@ class ErrorHandlersManager {
       console.warn('[Error Handlers] Failed to persist lost proxy control:', err);
     }
 
+    if (generation !== this.#generation) return;
     const message = getControlLossMessage(levelOfControl);
     this.addError({
       type: 'no-control',
@@ -251,6 +309,8 @@ class ErrorHandlersManager {
   }
 
   resetRuntimeState() {
+    this.#generation++;
+    this.#initPromise = null;
     this.lastErrors = [];
     this.notificationsEnabled = {
       'pac-error': true,

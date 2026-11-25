@@ -22,6 +22,15 @@ describe('domain rules canonical validation', () => {
     expect(parsed.skippedCount).to.equal(1);
   });
 
+  it('diagnoses geosite include references without inventing domains', () => {
+    const parsed = parseDomainRuleLines(['# comment', 'include:anthropic', 'INCLUDE:example.com', 'https://Example.COM/path']);
+    expect(parsed.validDomains).to.deep.equal(['example.com']);
+    expect(parsed.errors.map(row => [row.line, row.code])).to.deep.equal([
+      [2, 'UNSUPPORTED_INCLUDE'], [3, 'UNSUPPORTED_INCLUDE'],
+    ]);
+    expect(parsed.errors[0].error).to.match(/include:.*geosite/i);
+  });
+
   it('drops unsafe keys before background persistence', () => {
     const result = sanitizeRuleCollections({ 'example.com': true, '__proto__': false }, ['ok.example', 'bad']);
     expect(result.exceptions).to.deep.equal({ 'example.com': true });

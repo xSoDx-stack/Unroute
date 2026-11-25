@@ -12,18 +12,20 @@ import { utils } from './utils.js';
 import { clarify, formatErrorMessage, getErrorCode } from './errors-lib.js';
 import { logger } from './logger.js';
 import { errorHandlers, isHardProxyControlConflict } from './error-handlers.js';
-import { validatePacScriptSource } from './pac-validator.js';
+import { clearPacValidationCache, validatePacScriptSource } from './pac-validator.js';
 import {
   assertProxySettingsControllable,
   withProxySettingsLock,
 } from './proxy-settings-lock.js';
 import { proxyBackend } from './proxy-backend.js';
+import { PAC_PROVIDERS } from './pac-providers.js';
+
+export { PAC_PROVIDERS } from './pac-providers.js';
 
 const STORAGE_KEY = 'antiCensorRu';
 const PAC_FRESHNESS_KEY = 'antiCensorPacFreshness';
 const ALARM_NAME = 'periodic-pac-update';
 const MAX_CUSTOM_PAC_BYTES = 10 * 1024 * 1024;
-const MAX_TRUSTED_PAC_BYTES = 25 * 1024 * 1024;
 const CONTROL_LOSS_CONFIRM_MS = 750;
 
 class SyncSupersededError extends Error {
@@ -36,60 +38,6 @@ class SyncSupersededError extends Error {
 const getPacSourceKey = (providerKey, customUrl = '') => providerKey === 'customPacUrl'
   ? `${providerKey}:${String(customUrl || '').trim()}`
   : String(providerKey || '');
-
-export const PAC_PROVIDERS = {
-  Антизапрет: {
-    distinctKey: 'Antizapret',
-    label: t('Antizapret', 'Антизапрет'),
-    desc: t('pac_provider_antizapret_description', 'PAC-скрипт проекта «Антизапрет».'),
-    order: 0,
-    maxBytes: MAX_TRUSTED_PAC_BYTES,
-    timeoutMs: 45000,
-    allowedFinalHosts: [
-      'e.cen.rodeo',
-      'antizapret.prostovpn.org',
-      '.ipfs.dweb.link',
-    ],
-    pacUrls: [
-      'https://e.cen.rodeo:8443/proxy.pac',
-      'https://antizapret.prostovpn.org:8443/proxy.pac',
-      'https://antizapret.prostovpn.org:18443/proxy.pac',
-      'https://antizapret.prostovpn.org/proxy.pac',
-    ],
-  },
-  Антицензорити: {
-    distinctKey: 'Anticensority',
-    label: t('Anticensority', 'Антицензорити'),
-    desc: t('pac_provider_anticensority_description', 'PAC-скрипт проекта «Антицензорити».'),
-    order: 1,
-    maxBytes: MAX_TRUSTED_PAC_BYTES,
-    timeoutMs: 45000,
-    allowedFinalHosts: [
-      'anticensority.github.io',
-      'raw.githubusercontent.com',
-    ],
-    pacUrls: [
-      'https://anticensority.github.io/generated-pac-scripts/anticensority.pac',
-      'https://raw.githubusercontent.com/anticensority/generated-pac-scripts/master/anticensority.pac',
-    ],
-  },
-  onlyOwnSites: {
-    distinctKey: 'onlyOwnSites',
-    label: t("msg_only_your_sites_tor_custom_proxies_d3781c05", "Только свои сайты (Tor / Свои прокси)"),
-    desc: t("msg_only_manually_added_sites_are_routed_through__6e0c474c", "Проксируются только вручную добавленные сайты через ваши прокси или локальный Tor."),
-    order: 2,
-    pacUrls: [
-      'data:application/x-ns-proxy-autoconfig,' + encodeURIComponent('function FindProxyForURL(url, host){ return "DIRECT"; }'),
-    ],
-  },
-  customPacUrl: {
-    distinctKey: 'customPacUrl',
-    label: t("msg_custom_pac_url_5933ecf2", "Свой PAC (по ссылке)"),
-    desc: t("msg_a_ready_to_use_pac_script_at_your_own_direct__ca526c8e", "Готовый PAC-скрипт по собственной прямой ссылке (HTTPS или HTTP на этом компьютере)."),
-    order: 3,
-    pacUrls: [],
-  },
-};
 
 class PacSyncManager {
   constructor() {
@@ -161,6 +109,7 @@ class PacSyncManager {
   }
 
   resetRuntimeState() {
+    clearPacValidationCache();
     this._downloadController?.abort();
     this._syncGeneration++;
     if (this._pendingSync) {
@@ -264,7 +213,6 @@ class PacSyncManager {
     }
 
     await this.updateControlState();
-    this.setupAlarms();
     this.updateTitle();
 
     const shouldHavePac = this.currentPacProviderKey &&
@@ -301,13 +249,18 @@ class PacSyncManager {
   async updateControlState({
     reportControlState = true,
     updateIcon = reportControlState,
+    isCurrent = () => true,
   } = {}) {
+    const revision = this.revision;
+    const generation = this._syncGeneration;
+    const canPublish = () => isCurrent() && revision === this.revision && generation === this._syncGeneration;
     let details = null;
     try {
       details = await proxyBackend.getSettings();
     } catch (error) {
       console.warn('proxy settings get error:', error);
     }
+    if (!canPublish()) return false;
     if (!details) {
       this._lastControlDetails = null;
       return false;
@@ -338,6 +291,7 @@ class PacSyncManager {
       await errorHandlers.handleControlState(controlState);
     }
 
+    if (!canPublish()) return false;
     if (updateIcon) this._updateControlIcon();
 
     return this.isControlled;
@@ -382,26 +336,28 @@ class PacSyncManager {
 
   async reconcileProxyState() {
     const reconcileGeneration = ++this._reconcileGeneration;
-    if (this._proxyMutationDepth > 0) return false;
+    const isCurrent = () => this._proxyMutationDepth === 0 && reconcileGeneration === this._reconcileGeneration;
+    if (!isCurrent()) return false;
 
-    await this.updateControlState({ reportControlState: false });
-    if (!this._lastControlDetails || reconcileGeneration !== this._reconcileGeneration) {
+    await this.updateControlState({ reportControlState: false, isCurrent });
+    if (!this._lastControlDetails || !isCurrent()) {
       return false;
     }
 
     let controlState = this._getCurrentControlState();
     if (isHardProxyControlConflict(controlState)) {
       await this._waitForControlStateStability();
-      if (reconcileGeneration !== this._reconcileGeneration) return false;
+      if (!isCurrent()) return false;
 
-      await this.updateControlState({ reportControlState: false });
-      if (!this._lastControlDetails || reconcileGeneration !== this._reconcileGeneration) {
+      await this.updateControlState({ reportControlState: false, isCurrent });
+      if (!this._lastControlDetails || !isCurrent()) {
         return false;
       }
       controlState = this._getCurrentControlState();
     }
 
     await errorHandlers.handleControlState(controlState);
+    if (!isCurrent()) return false;
     this._updateControlIcon();
     const shouldHavePac = controlState.expectedControl;
     if (shouldHavePac && this.isControllable && !this.isExpectedPacApplied) {
@@ -526,6 +482,7 @@ class PacSyncManager {
   }
 
   async applyPacData(candidateRawData, options = {}) {
+    this._reconcileGeneration++;
     this._proxyMutationDepth++;
     try {
       return await this._applyPacData(candidateRawData, options);
@@ -534,7 +491,7 @@ class PacSyncManager {
     }
   }
 
-  async _applyPacData(candidateRawData, { expectedSyncGeneration = null } = {}) {
+  async _applyPacData(candidateRawData, { expectedSyncGeneration = null, onApplied } = {}) {
     const ensureCurrentSync = () => {
       if (expectedSyncGeneration !== null && expectedSyncGeneration !== this._syncGeneration) {
         throw new SyncSupersededError();
@@ -556,6 +513,7 @@ class PacSyncManager {
       ensureCurrentSync();
       const previousDetails = await assertProxySettingsControllable();
       ensureCurrentSync();
+      const previousState = onApplied && this._createStateSnapshot();
       const alreadyApplied = previousDetails.levelOfControl === 'controlled_by_this_extension' &&
         proxyBackend.isExpectedPacApplied(previousDetails, candidateCooked) &&
         (proxyBackend.platform === 'firefox' || Boolean(previousDetails.value?.pacScript?.mandatory) === Boolean(isProxyOrDie));
@@ -569,25 +527,55 @@ class PacSyncManager {
         // A reset or a newer sync may supersede this request while Chrome is
         // applying the PAC. Restore the exact setting observed under the same
         // lock before allowing the stale operation to escape.
-        await proxyBackend.restore(previousDetails);
+        if (!alreadyApplied) await proxyBackend.restore(previousDetails);
         throw err;
       }
+      // Publish while the native setting and this generation still agree.
+      this.revision++;
+      this.rawPacData = candidateRawData;
+      this.cookedPacData = candidateCooked;
+      // Keep the undo record even if async bookkeeping rejects before commit.
+      onApplied?.({ revision: this.revision, previousState, previousDetails, changedNative: !alreadyApplied });
     });
 
-    // Transaction Commit on success
-    this.revision++;
-    this.rawPacData = candidateRawData;
-    this.cookedPacData = candidateCooked;
+    ensureCurrentSync();
     await applicationState.applied(pacMods.revision || 0).catch(error => {
       console.warn('[Settings] Could not checkpoint applied revision:', error.message);
     });
+    ensureCurrentSync();
     try {
       ipToHost.updateFromPac(candidateRawData);
       await ipToHost.persistData();
     } catch {
       // Non-critical
     }
+    ensureCurrentSync();
     await this.updateControlState();
+  }
+
+  async _rollbackProviderPac({ revision, previousState, previousDetails, changedNative }) {
+    this._reconcileGeneration++;
+    this._proxyMutationDepth++;
+    try {
+      await withProxySettingsLock(async () => {
+        if (revision !== this.revision) return;
+        try {
+          if (changedNative) {
+            await assertProxySettingsControllable();
+            if (revision !== this.revision) return;
+            await proxyBackend.restore(previousDetails);
+          }
+        } finally {
+          if (revision === this.revision) {
+            this.revision++;
+            this._restoreStateSnapshot(previousState);
+          }
+        }
+      });
+      await this.updateControlState();
+    } finally {
+      this._proxyMutationDepth--;
+    }
   }
 
   _isSameSyncRequest(optA, optB) {
@@ -716,8 +704,7 @@ class PacSyncManager {
     }
 
     this.lastError = null;
-    const previousState = this._createStateSnapshot();
-    let appliedRevision = null;
+    let uncommittedPac = null;
 
     try {
       console.log(`[PAC Sync] Downloading PAC for provider "${key}"...`);
@@ -750,6 +737,7 @@ class PacSyncManager {
           lastPacUpdateStamp: now,
           providerUpdateStamps: nextProviderUpdateStamps,
         });
+        if (generation !== this._syncGeneration) throw new SyncSupersededError();
         this.lastPacUpdateStamp = now;
         this.providerUpdateStamps = nextProviderUpdateStamps;
         this.updateTitle();
@@ -762,8 +750,10 @@ class PacSyncManager {
       }
 
       console.log('[PAC Sync] Cooking and applying PAC script...');
-      await this.applyPacData(candidateRaw, { expectedSyncGeneration: generation });
-      appliedRevision = this.revision;
+      await this.applyPacData(candidateRaw, {
+        expectedSyncGeneration: generation,
+        onApplied: snapshot => { uncommittedPac = snapshot; },
+      });
       if (generation !== this._syncGeneration) {
         throw new SyncSupersededError();
       }
@@ -777,6 +767,7 @@ class PacSyncManager {
       this.lastPacUpdateStamp = now;
       this.providerUpdateStamps[key] = now;
       await this.persistState();
+      uncommittedPac = null;
 
       console.log('[PAC Sync] Successfully updated PAC!');
       logger.info('pac', t("msg_pac_script_sub_updated_successfully_6de11e5c", "PAC-скрипт \"$1\" успешно обновлён", [PAC_PROVIDERS[key]?.label || key]), t("msg_pac_size_sub_kb_c27da43e", "Размер PAC: $1 КБ", [(candidateRaw.length / 1024).toFixed(1)]), {
@@ -784,16 +775,14 @@ class PacSyncManager {
         lastPacUpdateStamp: now,
       });
     } catch (err) {
-      if (err instanceof SyncSupersededError) {
-        throw err;
-      }
-      if (appliedRevision !== null && this.revision === appliedRevision) {
+      if (uncommittedPac && this.revision === uncommittedPac.revision) {
         try {
-          await this._rollbackPacState(previousState);
+          await this._rollbackProviderPac(uncommittedPac);
         } catch (rollbackErr) {
           console.error('[PAC Sync] Failed to roll back an uncommitted PAC update:', rollbackErr);
         }
       }
+      if (err instanceof SyncSupersededError) throw err;
       this.lastError = err;
       const errorMsg = formatErrorMessage(err) || err.message || String(err);
       console.warn(`[PAC Sync Warning for "${key}"]:`, errorMsg);
@@ -817,12 +806,18 @@ class PacSyncManager {
 
   cancelPendingSync() {
     this._syncGeneration++;
+    this._reconcileGeneration++;
     this._downloadController?.abort();
     if (this._pendingSync) {
       const error = new SyncSupersededError();
       this._pendingSync.deferreds.forEach(({ reject }) => reject(error));
       this._pendingSync = null;
     }
+  }
+
+  async drainPendingSync() {
+    this.cancelPendingSync();
+    await this._currentSyncPromise?.catch(() => {});
   }
 
   async setRawPacData(candidateRawData) {
@@ -889,17 +884,30 @@ class PacSyncManager {
         throw err;
       }
     }
+    if (!this.rawPacData) clearPacValidationCache();
     await this.updateControlState();
   }
 
   async reapplyCurrentPac() {
     const generation = this._syncGeneration;
-    this.revision++;
     if (this.currentPacProviderKey === 'none' || !this.currentPacProviderKey) {
       return withProxySettingsLock(async () => {
-        await assertProxySettingsControllable();
-        await proxyBackend.clear();
-        await this.updateControlState();
+        const previousDetails = await assertProxySettingsControllable();
+        if (generation !== this._syncGeneration) return;
+        this._reconcileGeneration++;
+        this._proxyMutationDepth++;
+        try {
+          await proxyBackend.clear();
+          if (generation !== this._syncGeneration) {
+            if (previousDetails.levelOfControl === 'controlled_by_this_extension') {
+              await assertProxySettingsControllable();
+              await proxyBackend.restore(previousDetails);
+            }
+            return;
+          }
+          this.revision++;
+          await this.updateControlState();
+        } finally { this._proxyMutationDepth--; }
       });
     }
     if (this.rawPacData) {

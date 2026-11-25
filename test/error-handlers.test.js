@@ -6,6 +6,20 @@ import { logger } from '../src/common/core/logger.js';
 import { storage } from '../src/common/core/storage.js';
 
 describe('Proxy error flood protection', () => {
+  let originalChrome, originalGet, listenersRegistered;
+  beforeEach(() => {
+    originalChrome = globalThis.chrome;
+    originalGet = storage.get;
+    listenersRegistered = errorHandlers._listenersRegistered;
+    globalThis.chrome = { runtime: {} };
+    storage.get = async (_key, fallback) => fallback;
+  });
+  afterEach(() => {
+    storage.get = originalGet;
+    globalThis.chrome = originalChrome;
+    errorHandlers._listenersRegistered = listenersRegistered;
+  });
+
   it('throttles identical PAC/proxy errors and their notifications', () => {
     const originalLoggerAdd = logger.add;
     const originalNotify = errorHandlers.notify;

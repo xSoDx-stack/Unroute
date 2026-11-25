@@ -127,7 +127,8 @@ describe('UI Safety & DOM Injection Resistance (Task 7.2)', () => {
     expect(app).not.to.include('UNDO_RULE_CHANGE');
     expect(app).not.to.match(/el\.(undo|lastChange|changeLabel)\b/);
     expect(read('options/index.html')).to.include('id="tab-history"');
-    expect(read('options/app.js')).to.include('renderHistory(el.historyList');
+    expect(read('options/app.js')).to.include('historyPanel.load()');
+    expect(read('options/history-panel.js')).to.include('renderHistory(container');
     expect(read('shared/history.js')).to.include('UNDO_RULE_CHANGE');
   });
 
@@ -148,10 +149,7 @@ describe('UI Safety & DOM Injection Resistance (Task 7.2)', () => {
     const appUrl = new URL('../src/common/pages/options/app.js', import.meta.url);
     const app = fs.readFileSync(appUrl, 'utf8');
 
-    expect(app).to.include("PAC_MODS_STORAGE_KEY = 'pac-kitchen-mods'");
-    expect(app).to.include('chrome.storage.onChanged.addListener');
-    expect(app).to.include("window.addEventListener('focus', scheduleExternalStateRefresh)");
-    expect(app).to.include("document.addEventListener('visibilitychange'");
+    expect(app).to.include('optionsState.watchExternal');
     expect(app).to.include('refreshState({ preloadLogs: true })');
   });
 });

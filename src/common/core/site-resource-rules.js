@@ -85,11 +85,12 @@ export function inheritResourceRules(current, batches, ruleMeta = current.ruleMe
   const siteForDomain = {};
   const listForDomain = {};
   const changedRecords = new Set();
+  const workingMods = { ...current, exceptions, domainProxyIds };
   for (const { record, hosts } of batches) {
     const parent = matchConfiguredRule(record.mainHost, current);
     if (current.ifMindExceptions === false) continue;
     for (const host of hosts) {
-      const plan = resourcePlan({ ...current, exceptions, domainProxyIds }, record, host, parent, ruleMeta);
+      const plan = resourcePlan(workingMods, record, host, parent, ruleMeta);
       if (!plan) continue;
       if (plan.mode === null) delete exceptions[plan.key];
       else exceptions[plan.key] = plan.mode;
@@ -127,8 +128,8 @@ export function planSiteRuleMode(current, root, hosts, mode, proxyId, mainHost =
     const resourceMode = !isControl(key) && current.siteResourceInheritance?.[root] === false ? false : mode;
     if (resourceMode === null) delete exceptions[key];
     else exceptions[key] = resourceMode;
-    if (exceptions[key] !== true) delete domainProxyIds[key];
-    else if (proxyId) domainProxyIds[key] = proxyId;
+    if (exceptions[key] !== true || !proxyId) delete domainProxyIds[key];
+    else domainProxyIds[key] = proxyId;
   }
   const pacBypass = new Set(current.pacBypassDomains || []);
   for (const key of new Set([root, mainHost])) {

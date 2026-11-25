@@ -1,7 +1,7 @@
 'use strict';
 
 import { t, uiLocale } from '../../core/i18n.js';
-import { refreshSettingsHelp } from './settings-help.js';
+import { setSettingsHelpText } from './settings-help.js';
 
 import { formatLogEntryForClipboard } from '../../core/log-format.js';
 
@@ -16,10 +16,12 @@ export async function copyText(text) {
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
-  if (!copied) throw new Error('Clipboard API unavailable');
+  try {
+    textarea.select();
+    if (!document.execCommand('copy')) throw new Error('Clipboard API unavailable');
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 export function renderLogsView(el, logsState, showToast) {
@@ -43,48 +45,47 @@ export function renderLogsView(el, logsState, showToast) {
   }
 
   // Update Filter Category Counters
-  if (el.countNetwork) el.countNetwork.textContent = stats.network ? `(${stats.network})` : '';
-  if (el.countProxy) el.countProxy.textContent = stats.proxy ? `(${stats.proxy})` : '';
-  if (el.countPac) el.countPac.textContent = stats.pac ? `(${stats.pac})` : '';
-  if (el.countAuth) el.countAuth.textContent = stats.auth ? `(${stats.auth})` : '';
-  if (el.countSystem) el.countSystem.textContent = stats.system ? `(${stats.system})` : '';
+  for (const [category, counter] of el.categoryCounts ?? []) {
+    if (counter) counter.textContent = stats[category] ? `(${stats[category]})` : '';
+  }
 
   if (!el.logsContainer) return;
 
   if (!items.length) {
-    const isFiltered = logsState.category !== 'all' || Boolean(logsState.search.trim());
+    const isFiltered = logsState.category !== 'all' || logsState.level !== 'all' || Boolean(logsState.search.trim());
     const emptyState = document.createElement('div');
     emptyState.className = 'empty-state';
 
     const title = document.createElement('p');
-    title.style.fontSize = '14.5px';
-    title.style.fontWeight = '600';
-    title.style.marginBottom = '4px';
+    title.className = 'logs-empty-title';
     title.textContent = isFiltered
       ? t("msg_no_entries_match_the_filter_65bb1c4c", "🔍 Записей по фильтру не найдено")
       : t("msg_no_errors_recorded_0986be50", "🛡️ Ошибок не зафиксировано");
 
     const description = document.createElement('p');
-    description.style.fontSize = '11.5px';
-    description.style.color = 'var(--text-muted)';
+    description.className = 'logs-empty-desc';
     description.textContent = isFiltered
-      ? t("msg_try_changing_the_category_or_clearing_the_sea_5ae7e689", "Попробуйте изменить категорию или очистить поисковый запрос")
+      ? t("logs_try_changing_filters", "Измените категорию или уровень либо очистите поиск.")
       : t("msg_network_requests_proxies_and_pac_scripts_are__8ccd866d", "Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме");
 
     emptyState.appendChild(title);
     emptyState.appendChild(description);
-    el.logsContainer.textContent = '';
-    el.logsContainer.appendChild(emptyState);
+    el.logsContainer.replaceChildren(emptyState);
     return;
   }
 
-  el.logsContainer.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+  const copyHelp = t("settings_help_log_copy", "Скопировать текст и подробности этой записи журнала.");
+  const expandHelp = t("settings_help_log_expand", "Показать или скрыть подробности этой записи.");
   const categoryLabels = {
     network: t("msg_network_f3f1c8f5", "🌐 Сеть"),
     proxy: t("msg_proxy_b93fd429", "⚙️ Прокси"),
     pac: '⚡ PAC',
     auth: '🔒 Auth',
     system: t("msg_system_6d0c6b0c", "💻 Система"),
+    rules: t("logs_category_rules", "Правила"),
+    settings: t("fidelity_settings", "Настройки"),
+    backup: t("logs_category_backup", "Резервные копии"),
   };
 
   items.forEach((log) => {
@@ -139,7 +140,7 @@ export function renderLogsView(el, logsState, showToast) {
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.className = 'log-copy-btn';
-    copyButton.title = t("msg_copy_this_entry_21bc6d3d", "Скопировать эту запись");
+    setSettingsHelpText(copyButton, copyHelp);
     copyButton.setAttribute('aria-label', t("msg_copy_this_log_entry_3c7795fa", "Скопировать эту запись журнала"));
     copyButton.textContent = '⧉';
     headerActions.appendChild(copyButton);
@@ -159,6 +160,26 @@ export function renderLogsView(el, logsState, showToast) {
       card.appendChild(msgDiv);
     }
 
+    if (log.details && typeof log.details === 'object') {
+      const metaEntries = [];
+      if (log.details.proxy) metaEntries.push([t('diag_meta_proxy', 'Прокси'), log.details.proxy]);
+      if (log.details.reserveProxy) metaEntries.push([t('diag_meta_reserve', 'Резерв'), log.details.reserveProxy]);
+      if (log.details.pacProvider) metaEntries.push(['PAC', log.details.pacProvider]);
+      if (log.details.domain) metaEntries.push([t('diag_meta_site', 'Сайт'), log.details.domain]);
+      if (log.details.rule) metaEntries.push([t('diag_meta_rule', 'Правило'), log.details.rule]);
+      if (metaEntries.length) {
+        const metaRow = document.createElement('div');
+        metaRow.className = 'log-card-meta';
+        for (const [label, value] of metaEntries) {
+          const chip = document.createElement('span');
+          chip.className = 'log-meta-chip';
+          chip.textContent = `${label}: ${value}`;
+          metaRow.appendChild(chip);
+        }
+        card.appendChild(metaRow);
+      }
+    }
+
     let detailsJson = '';
     if (log.details) {
       try {
@@ -169,19 +190,28 @@ export function renderLogsView(el, logsState, showToast) {
     }
 
     if (detailsJson) {
-      const hint = document.createElement('div');
+      setSettingsHelpText(card, expandHelp);
+      const hint = document.createElement('button');
+      hint.type = 'button';
       hint.className = 'log-expand-hint';
+      setSettingsHelpText(hint, expandHelp);
+      // Keep the existing inline disclosure styling while using a native button.
+      Object.assign(hint.style, { display: 'block', padding: '0', border: '0', background: 'none', cursor: 'pointer' });
+      hint.setAttribute('aria-expanded', 'false');
       hint.textContent = t("msg_click_to_show_details_29a1b869", "▶ Нажмите, чтобы посмотреть подробности");
       card.appendChild(hint);
 
       const detailsBlock = document.createElement('div');
       detailsBlock.className = 'log-details-block';
+      detailsBlock.hidden = true;
       detailsBlock.textContent = detailsJson;
       card.appendChild(detailsBlock);
 
       card.addEventListener('click', () => {
-        card.classList.toggle('expanded');
-        hint.textContent = card.classList.contains('expanded')
+        const expanded = card.classList.toggle('expanded');
+        hint.setAttribute('aria-expanded', String(expanded));
+        detailsBlock.hidden = !expanded;
+        hint.textContent = expanded
           ? t("msg_hide_details_00917413", "▼ Скрыть подробности")
           : t("msg_click_to_show_details_29a1b869", "▶ Нажмите, чтобы посмотреть подробности");
       });
@@ -203,9 +233,9 @@ export function renderLogsView(el, logsState, showToast) {
       }
     });
 
-    refreshSettingsHelp(card);
-    el.logsContainer.appendChild(card);
+    fragment.appendChild(card);
   });
+  el.logsContainer.replaceChildren(fragment);
 }
 
 

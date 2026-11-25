@@ -123,6 +123,13 @@ describe('Versioned settings and safe rule undo', () => {
     expect(skipped.exceptions).to.equal(touched.exceptions);
     expect(skipped.ruleMeta).to.equal(touched.ruleMeta);
   });
+  it('drops noncanonical rule metadata keys while preserving canonical rules and tombstones', () => {
+    const meta = { source: 'manual', revision: 1 };
+    const valid = ['exception:*.example.test', 'whitelist:192.0.2.1', 'proxy:xn--bcher-kva.test', 'pac:removed.test'];
+    const invalid = ['exception:bad domain.test', 'whitelist:example.test/path', 'proxy:Example.test', 'pac:example.test.'];
+    const raw = migrateSettings({ ruleMeta: Object.fromEntries([...valid, ...invalid].map(key => [key, meta])) });
+    expect(Object.keys(raw.ruleMeta)).to.deep.equal(valid);
+  });
   it('ignores malformed optional metadata/history without losing valid legacy rules', () => {
     const raw = migrateSettings({ exceptions: { 'valid.test': true }, ruleMeta: { bad: 'x' },
       ruleHistory: [null, {}, { id: 'r1', revision: 1, changes: [null, { kind: 'unsafe', domain: 'x' }] }] });
@@ -138,6 +145,17 @@ describe('Versioned settings and safe rule undo', () => {
     expect(after.ruleHistory[0].changes).to.have.length(0);
     expect(() => undoRuleChange(after)).to.throw('слишком велико');
     expect(after.exceptions).to.have.property('s50000.test', true);
+  });
+  it('clears proxy provenance for removed assignments without dropping live assignments or suppression', () => {
+    const meta = { source: 'manual', revision: 1 };
+    const raw = migrateSettings({ exceptions: { 'shared.test': true, 'bound.test': true },
+      domainProxyIds: { 'bound.test': 'builtin:tor' }, ruleMeta: {
+        'exception:shared.test': meta, 'proxy:shared.test': meta, 'proxy:bound.test': meta,
+        'proxy:suppressed.test': { ...meta, suppressAuto: true },
+      } });
+    expect(Object.keys(clearRuleHistory(raw).ruleMeta)).to.deep.equal([
+      'exception:shared.test', 'proxy:bound.test', 'proxy:suppressed.test',
+    ]);
   });
   it('purges deleted rule history while preserving live rules and automatic-add suppression', () => {
     let raw = edit(migrateSettings({ exceptions: {} }), { 'cdn.test': true });

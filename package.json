@@ -1,6 +1,6 @@
 {
   "name": "unroute",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Unroute — PAC-расширение Manifest V3 для Chromium и Firefox",
   "scripts": {
     "icons:generate": "node scripts/generate-icons.mjs",

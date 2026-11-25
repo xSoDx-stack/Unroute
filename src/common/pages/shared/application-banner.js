@@ -13,12 +13,20 @@ export function renderApplicationBanner(container, state, refresh) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn btn-secondary btn-sm';
-  button.textContent = t("msg_apply_again_4548c504", "Применить снова");
+  const retryLabel = t("msg_apply_again_4548c504", "Применить снова");
+  button.textContent = retryLabel;
   button.addEventListener('click', async () => {
     button.disabled = true;
     button.textContent = t("msg_applying_b001f5d8", "Применяем…");
-    await sendMessage({ action: 'RETRY_SETTINGS_APPLY' });
-    await refresh();
+    try {
+      await sendMessage({ action: 'RETRY_SETTINGS_APPLY' });
+      await refresh();
+    } catch (error) {
+      console.warn('[Settings] Could not refresh application status:', error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = retryLabel;
+    }
   });
   container.append(text, button);
 }

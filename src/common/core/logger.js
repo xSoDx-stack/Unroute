@@ -8,6 +8,8 @@ const STORAGE_LOGS_KEY = 'antiCensorLogs';
 const MAX_LOGS_LIMIT = 150;
 const DUPLICATE_WINDOW_MS = 10000;
 const IMMEDIATE_SAVE_INTERVAL_MS = 1000;
+const LOG_LEVELS = new Set(['error', 'warn', 'info']);
+const LOG_CATEGORIES = new Set(['network', 'proxy', 'pac', 'auth', 'system', 'rules', 'settings', 'backup']);
 
 /**
  * Sanitize strings to redact passwords, auth credentials, tokens, and cookies
@@ -18,6 +20,10 @@ export function sanitizeLogString(str) {
   if (!str || typeof str !== 'string') return str;
 
   return str
+    // Proxy directives accept unescaped punctuation in user info. Use the
+    // last @ in the directive before its host and numeric port.
+    .replace(/(\b(?:HTTPS?|PROXY|SOCKS[45]?|QUIC)\s+)[^\s:;]+:[^\s;]+(@(?:\[[0-9a-f:.]+\]|[\w.-]+):\d+)/gi,
+      '$1***:***$2')
     // Mask user:pass@host in proxy or URL strings (e.g. HTTPS user:password@host:port)
     .replace(/([a-zA-Z0-9+.-]+:\/\/)?([^:\s/@]+):([^@\s/]+)@/g, (match, proto) => {
       const p = proto || '';
@@ -30,7 +36,8 @@ export function sanitizeLogString(str) {
     .replace(/(Bearer\s+)[a-zA-Z0-9._~+/-]{10,}/gi, '$1***')
     // Mask cookie headers and JSON/form-style secrets copied into diagnostics
     .replace(/((?:set-cookie|cookie):\s*)[^\r\n]+/gi, '$1***')
-    .replace(/(["']?(?:password|pass|pwd|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret)["']?\s*[:=]\s*["']?)[^"'\s,;&]+/gi, '$1***')
+    .replace(/(["']?(?:password|pass|pwd|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret)["']?\s*[:=]\s*)("(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^"'\s,;&]+)/gi,
+      (_, key, value) => key + (/^["']/.test(value) ? `${value[0]}***${value[0]}` : '***'))
     // Mask URL query params with credentials
     .replace(/([?&](?:password|pass|pwd|token|access_token|refresh_token|secret|client_secret|auth|key|api_key|apiKey|cookie|session)=)[^&#\s]+/gi, '$1***');
 }
@@ -41,6 +48,10 @@ export function sanitizeLogString(str) {
  * @returns {any} Cleaned, sanitized data
  */
 export function sanitizeLogData(data) {
+  return sanitizeValue(data, new WeakSet(), 0);
+}
+
+function sanitizeValue(data, ancestors, depth) {
   if (data === null || data === undefined) {
     return data;
   }
@@ -53,57 +64,96 @@ export function sanitizeLogData(data) {
     return data;
   }
 
-  if (Array.isArray(data)) {
-    return data.map((item) => sanitizeLogData(item));
-  }
-
   if (typeof data === 'object') {
-    const cleanObj = {};
+    if (ancestors.has(data)) return '[Circular]';
+    if (depth >= 32) return '[Truncated]';
+    ancestors.add(data);
     const SENSITIVE_KEYS = /^(password|pass|pwd|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|session(?:id)?|auth|authorization|cookie|cookies|set-cookie|credentials|proxycredentials|rawauth)$/i;
-
-    for (const [key, value] of Object.entries(data)) {
-      if (SENSITIVE_KEYS.test(key)) {
-        cleanObj[key] = '***';
-      } else {
-        cleanObj[key] = sanitizeLogData(value);
-      }
+    try {
+      return Array.isArray(data) ? data.map(item => sanitizeValue(item, ancestors, depth + 1)) :
+        Object.fromEntries(Object.entries(data).map(([key, value]) =>
+          [key, SENSITIVE_KEYS.test(key) ? '***' : sanitizeValue(value, ancestors, depth + 1)]));
+    } finally {
+      ancestors.delete(data);
     }
-    return cleanObj;
   }
 
   return sanitizeLogString(String(data));
+}
+
+function freezeLogData(data) {
+  if (data && typeof data === 'object') {
+    for (const value of Object.values(data)) freezeLogData(value);
+    Object.freeze(data);
+  }
+  return data;
+}
+
+function cleanLogEntry({ id, timestamp, level, category, title, message, details, groupKey, count }) {
+  let cleanDetails = null;
+  if (details != null) {
+    try {
+      cleanDetails = typeof details === 'object' ? freezeLogData(sanitizeLogData(details)) : sanitizeLogString(String(details));
+    } catch {
+      cleanDetails = '[Unavailable]';
+    }
+  }
+  return Object.freeze({
+    id: typeof id === 'string' ? sanitizeLogString(id) : '',
+    timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+    level: LOG_LEVELS.has(level) ? level : 'error',
+    category: LOG_CATEGORIES.has(category) ? category : 'system',
+    title: sanitizeLogString(String(title || t("msg_unknown_error_2d55ddef", "Неизвестная ошибка"))),
+    message: sanitizeLogString(String(message || '')),
+    details: cleanDetails,
+    groupKey: sanitizeLogString(String(groupKey || '')),
+    ...(Number.isSafeInteger(count) && count > 1 ? { count } : {}),
+  });
 }
 
 /**
  * Structured Logging & Diagnostics Engine for Manifest V3
  */
 class LoggerManager {
+  #logs = [];
+  #initPromise = null;
+  #generation = 0;
+
   constructor() {
-    this.logs = [];
     this.saveTimeout = null;
     this.savePromise = Promise.resolve();
     this.lastImmediateSaveAt = 0;
     this.isInitialized = false;
   }
 
-  async init() {
-    if (this.isInitialized) return;
-    try {
-      const saved = await storage.get(STORAGE_LOGS_KEY, []);
-      if (Array.isArray(saved)) {
-        this.logs = saved.slice(0, MAX_LOGS_LIMIT);
+  init() {
+    if (this.isInitialized) return Promise.resolve();
+    if (this.#initPromise) return this.#initPromise;
+    const generation = this.#generation;
+    this.#initPromise = this.savePromise.catch(() => {}).then(async () => {
+      if (generation !== this.#generation) return;
+      try {
+        const saved = await storage.get(STORAGE_LOGS_KEY, []);
+        if (generation !== this.#generation) return;
+        if (Array.isArray(saved)) {
+          const restored = saved.slice(0, MAX_LOGS_LIMIT - this.#logs.length)
+            .filter(entry => entry && typeof entry === 'object' && !Array.isArray(entry))
+            .map(cleanLogEntry);
+          this.#logs.push(...restored);
+        }
+      } catch (err) {
+        console.warn('[Logger] Failed to restore logs from storage:', err);
       }
-    } catch (err) {
-      console.warn('[Logger] Failed to restore logs from storage:', err);
-    }
-    this.isInitialized = true;
+      if (generation === this.#generation) this.isInitialized = true;
+    });
+    return this.#initPromise;
   }
 
   /**
    * Add a new log entry with automatic sanitization
    * @param {Object} entry
    * @param {'error'|'warn'|'info'} [entry.level='error']
-   * @param {'network'|'proxy'|'pac'|'auth'|'system'} [entry.category='system']
+   * @param {'network'|'proxy'|'pac'|'auth'|'system'|'rules'|'settings'|'backup'} [entry.category='system']
    * @param {string} entry.title
    * @param {string} [entry.message='']
    * @param {any} [entry.details=null]
@@ -112,72 +162,41 @@ class LoggerManager {
   add({ level = 'error', category = 'system', title = '', message = '', details = null, groupKey = '' }) {
     const timestamp = Date.now();
     const id = `${timestamp}-${Math.random().toString(36).slice(2, 7)}`;
-
-    // Sanitize title and message against secrets
-    const sanitizedTitle = sanitizeLogString(String(title || t("msg_unknown_error_2d55ddef", "Неизвестная ошибка")));
-    const sanitizedMessage = sanitizeLogString(String(message || ''));
-
-    // Clean and sanitize details
-    let cleanDetails = null;
-    if (details !== null && details !== undefined) {
-      if (typeof details === 'object') {
-        try {
-          cleanDetails = sanitizeLogData(JSON.parse(JSON.stringify(details)));
-        } catch {
-          cleanDetails = sanitizeLogString(String(details));
-        }
-      } else {
-        cleanDetails = sanitizeLogString(String(details));
-      }
-    }
-
-    const logEntry = {
-      id,
-      timestamp,
-      level,
-      category,
-      title: sanitizedTitle,
-      message: sanitizedMessage,
-      details: cleanDetails,
-      groupKey: sanitizeLogString(String(groupKey || '')),
-    };
-
-    // Avoid duplicate storm (same error and category within 1.5 seconds)
-    const recent = this.logs[0];
+    const logEntry = cleanLogEntry({ id, timestamp, level, category, title, message, details, groupKey });
+    const recent = this.#logs[0];
     if (
       recent &&
-      recent.category === category &&
+      recent.level === logEntry.level &&
+      recent.category === logEntry.category &&
       recent.title === logEntry.title &&
       recent.message === logEntry.message &&
       (recent.groupKey || '') === logEntry.groupKey &&
       timestamp - recent.timestamp < DUPLICATE_WINDOW_MS
     ) {
-      recent.count = (recent.count || 1) + 1;
-      recent.timestamp = timestamp;
-      this.scheduleSave(level === 'error');
-      return recent;
+      const repeated = Object.freeze({ ...recent, count: (recent.count || 1) + 1, timestamp });
+      this.#logs[0] = repeated;
+      this.scheduleSave(logEntry.level === 'error');
+      return repeated;
     }
 
     // Newest entry added to the top; maintain MAX_LOGS_LIMIT
-    this.logs.unshift(logEntry);
-    while (this.logs.length > MAX_LOGS_LIMIT) {
-      this.logs.pop();
-    }
+    this.#logs.unshift(logEntry);
+    if (this.#logs.length > MAX_LOGS_LIMIT) this.#logs.pop();
 
-    this.scheduleSave(level === 'error');
+    this.scheduleSave(logEntry.level === 'error');
     return logEntry;
   }
 
-  error(category, title, message, details) {
-    return this.add({ level: 'error', category, title, message, details });
+  error(category, title, message, details, groupKey = '') {
+    return this.add({ level: 'error', category, title, message, details, groupKey });
   }
 
-  warn(category, title, message, details) {
-    return this.add({ level: 'warn', category, title, message, details });
+  warn(category, title, message, details, groupKey = '') {
+    return this.add({ level: 'warn', category, title, message, details, groupKey });
   }
 
-  info(category, title, message, details) {
-    return this.add({ level: 'info', category, title, message, details });
+  info(category, title, message, details, groupKey = '') {
+    return this.add({ level: 'info', category, title, message, details, groupKey });
   }
 
   /**
@@ -200,15 +219,25 @@ class LoggerManager {
   }
 
   queueSave() {
-    // Snapshot now and serialize writes so an older, slower callback cannot
-    // overwrite a newer log state.
-    const snapshot = sanitizeLogData(this.logs);
-    this.savePromise = this.savePromise
-      .catch(() => {})
-      .then(() => storage.set(STORAGE_LOGS_KEY, snapshot))
-      .catch((err) => {
+    const generation = this.#generation;
+    // Entries and details are immutable and already sanitized. A cold save
+    // must wait for the stored history to be merged before taking a snapshot.
+    const snapshot = this.isInitialized ? this.#logs.slice() : null;
+    const ready = snapshot ? null : this.init();
+    return this.#enqueueWrite(async () => {
+      if (generation !== this.#generation) return;
+      if (ready) await ready;
+      if (generation !== this.#generation) return;
+      try {
+        await storage.set(STORAGE_LOGS_KEY, snapshot ?? this.#logs.slice());
+      } catch (err) {
         console.warn('[Logger] Failed to save logs to storage:', err);
-      });
+      }
+    });
+  }
+
+  #enqueueWrite(write) {
+    this.savePromise = this.savePromise.catch(() => {}).then(write);
     return this.savePromise;
   }
 
@@ -216,7 +245,7 @@ class LoggerManager {
    * Get filtered logs
    */
   getLogs({ category = 'all', level = 'all', search = '', limit = 150 } = {}) {
-    let result = this.logs;
+    let result = this.#logs;
 
     if (category && category !== 'all') {
       result = result.filter((log) => log.category === category);
@@ -244,21 +273,15 @@ class LoggerManager {
    */
   getStats() {
     const stats = {
-      total: this.logs.length,
-      network: 0,
-      proxy: 0,
-      pac: 0,
-      auth: 0,
-      system: 0,
+      total: this.#logs.length,
+      ...Object.fromEntries(Array.from(LOG_CATEGORIES, category => [category, 0])),
       errors: 0,
       warnings: 0,
       info: 0,
     };
 
-    for (const log of this.logs) {
-      if (stats[log.category] !== undefined) {
-        stats[log.category]++;
-      }
+    for (const log of this.#logs) {
+      stats[log.category]++;
       if (log.level === 'error') stats.errors++;
       else if (log.level === 'warn') stats.warnings++;
       else if (log.level === 'info') stats.info++;
@@ -271,19 +294,18 @@ class LoggerManager {
    * Clear all stored logs
    */
   async clear() {
-    this.logs = [];
-    clearTimeout(this.saveTimeout);
-    this.saveTimeout = null;
-    await this.savePromise.catch(() => {});
-    await storage.set(STORAGE_LOGS_KEY, []);
+    this.resetRuntimeState();
+    this.isInitialized = true;
+    await this.#enqueueWrite(() => storage.set(STORAGE_LOGS_KEY, []));
     return true;
   }
 
   resetRuntimeState() {
-    this.logs = [];
+    this.#generation++;
+    this.#initPromise = null;
+    this.#logs = [];
     clearTimeout(this.saveTimeout);
     this.saveTimeout = null;
-    this.savePromise = Promise.resolve();
     this.lastImmediateSaveAt = 0;
     this.isInitialized = false;
   }
@@ -292,9 +314,13 @@ class LoggerManager {
    * Export logs as a clean, sanitized text report
    */
   exportText(category = 'all', search = '') {
-    const logs = this.getLogs({ category, search, limit: MAX_LOGS_LIMIT });
+    return this.exportReport({ category, search }).text;
+  }
+
+  exportReport({ category, level, search } = {}) {
+    const logs = this.getLogs({ category, level, search, limit: MAX_LOGS_LIMIT });
     if (!logs.length) {
-      return t("msg_the_error_log_is_empty_fc25b18e", "# Журнал ошибок и сбоев пуст.\n");
+      return { count: 0, text: t("msg_the_error_log_is_empty_fc25b18e", "# Журнал ошибок и сбоев пуст.\n") };
     }
 
     let report = `=======================================================\n`;
@@ -318,7 +344,7 @@ class LoggerManager {
       report += `-------------------------------------------------------\n`;
     });
 
-    return report;
+    return { count: logs.length, text: report };
   }
 }
 

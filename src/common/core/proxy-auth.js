@@ -14,9 +14,28 @@ import { logger } from './logger.js';
 
 // Persistent credentials map (saved to storage, survives restarts): "host:port" / "host" -> { username, password }
 let persistentCredentialsMap = {};
+let credentialsGeneration = 0;
 
 // Temporary credentials map (in-memory only, never saved to storage, cleaned up after health check): "host:port" / "host" -> { username, password }
 let temporaryCredentialsMap = {};
+let activeProbeAuth = null;
+
+// Probes are serialized. Keep the correlation in memory for this fetch only.
+export function observeProxyProbeAuth(url, hostname, port) {
+  const probe = { url, hosts: getHostAliases(hostname), port: String(port), denied: false };
+  activeProbeAuth = probe;
+  return {
+    wasDenied: () => probe.denied,
+    close() { if (activeProbeAuth === probe) activeProbeAuth = null; },
+  };
+}
+
+function getMatchingProbe(details) {
+  const probe = activeProbeAuth;
+  if (probe && details.url === probe.url && String(details.challenger?.port) === probe.port &&
+      probe.hosts.includes(canonicalAuthHost((details.challenger?.host || '').toLowerCase().trim()))) return probe;
+  return null;
+}
 
 const AUTH_ATTEMPTS_KEY = 'proxy-auth-attempts';
 const AUTH_TRY_TTL_MS = 60_000;
@@ -75,9 +94,7 @@ function normalizeAuthAttempts(raw, now = Date.now()) {
   const recent = Object.entries(raw)
     .filter(([, state]) => state && Number.isInteger(state.tries) &&
       state.tries > 0 && Number.isFinite(state.updatedAt) &&
-      now - state.updatedAt < AUTH_TRY_TTL_MS)
-    .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
-    .slice(0, MAX_TRACKED_REQUESTS);
+      now - state.updatedAt < AUTH_TRY_TTL_MS);
 
   for (const [key, state] of recent) {
     normalized[key] = { tries: state.tries, updatedAt: state.updatedAt };
@@ -107,6 +124,7 @@ export function consumeProxyAuthAttempt(requestId, now = Date.now()) {
     const attempts = normalizeAuthAttempts(stored && stored[AUTH_ATTEMPTS_KEY], now);
     const tries = attempts[key] ? attempts[key].tries : 0;
     if (tries >= MAX_AUTH_TRIES) return { allowed: false, tries };
+    if (!tries && Object.keys(attempts).length >= MAX_TRACKED_REQUESTS) return { allowed: false, tries: 0 };
 
     attempts[key] = { tries: tries + 1, updatedAt: now };
     await callSessionStorage('set', { [AUTH_ATTEMPTS_KEY]: attempts });
@@ -155,26 +173,27 @@ function getHostAliases(hostname = '') {
   if (isLoopbackHost(h)) {
     return ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'];
   }
-  return [h];
+  return [canonicalAuthHost(h)];
 }
 
-export async function initProxyAuth() {
-  const mods = await storage.get('pac-kitchen-mods', {});
-  persistentCredentialsMap = buildProxyCredentialsMap(mods.customProxyStringRaw || '');
-  await storage.remove('proxy-credentials-map').catch(() => {});
+function canonicalAuthHost(host) {
+  return host.includes(':') ? `[${host.replace(/^\[|\]$/g, '')}]` : host;
+}
+
+export async function initProxyAuth(loadMods = null) {
+  const generation = credentialsGeneration;
+  const mods = await (loadMods ? loadMods() : storage.get('pac-kitchen-mods', {}));
+  // A settings commit/reset while a cold read is pending owns the newer map.
+  if (generation === credentialsGeneration) {
+    commitProxyCredentials(buildProxyCredentialsMap(mods.customProxyStringRaw || ''));
+  }
+  if (!loadMods) await storage.remove('proxy-credentials-map').catch(() => {});
 }
 
 export function buildProxyCredentialsMap(customProxyStringRaw = '') {
   const newMap = {};
   if (customProxyStringRaw) {
-    const lines = customProxyStringRaw
-      .replace(/#.*$/gm, '')
-      .split(/(?:\s*(?:;\r?\n)+\s*|\r?\n+|;\s*)+/g)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    for (const line of lines) {
-      const parsed = utils.parseProxyScheme(line);
+    for (const parsed of utils.parseCustomProxies(customProxyStringRaw)) {
       if (
         parsed && parsed.hostname && parsed.username && parsed.port &&
         (parsed.type === 'HTTP' || parsed.type === 'HTTPS')
@@ -197,11 +216,12 @@ export function buildProxyCredentialsMap(customProxyStringRaw = '') {
 }
 
 export function commitProxyCredentials(newMap) {
+  credentialsGeneration++;
   persistentCredentialsMap = Object.assign({}, newMap || {});
 }
 
 export function resetProxyCredentialsState() {
-  persistentCredentialsMap = {};
+  commitProxyCredentials({});
   temporaryCredentialsMap = {};
   clearProxyAuthAttempts().catch((err) => {
     console.warn('[Proxy Auth] Failed to clear retry state:', err);
@@ -304,7 +324,7 @@ function lookupInMap(map, hostStr, portStr) {
 }
 
 export function findCredentials(host, port) {
-  const hostStr = (host || '').toLowerCase().trim();
+  const hostStr = canonicalAuthHost((host || '').toLowerCase().trim());
   const portStr = port !== undefined && port !== null && String(port).trim() !== ''
     ? String(port).trim()
     : '';
@@ -334,7 +354,7 @@ export function getTemporaryCredentialsMap() {
   return Object.assign({}, temporaryCredentialsMap);
 }
 
-export function setupAuthListener(ensureReady = null) {
+export function setupAuthListener(ensureReady = null, ensureLoggerReady = () => logger.init()) {
   let readyPromise = null;
   const initialize = ensureReady || (() => {
     if (!readyPromise) readyPromise = initProxyAuth().catch(error => { readyPromise = null; throw error; });
@@ -354,23 +374,33 @@ export function setupAuthListener(ensureReady = null) {
           return {};
         }
 
+        const { host, port } = details.challenger ?? {};
+        if (!host) {
+          if (asyncCallback) asyncCallback({});
+          return {};
+        }
+        const probe = getMatchingProbe(details);
+        const logAuthentication = () => {
+          if (details.incognito) return;
+          // Restore existing logs first, without blocking the challenge.
+          Promise.resolve().then(ensureLoggerReady).then(() => {
+            logger.info('auth', t("msg_proxy_authentication_7759383e", "Аутентификация прокси"), t("msg_sending_credentials_6adbc196", "Отправка учётных данных"));
+          }).catch(() => {});
+        };
         const handleAuth = async () => {
-          const host = details.challenger.host;
-          const port = details.challenger.port;
           const creds = findCredentials(host, port);
 
           if (creds && creds.username) {
             const reqId = details.requestId;
             const attempt = await consumeProxyAuthAttempt(reqId);
             if (!attempt.allowed) {
+              if (probe && attempt.tries >= MAX_AUTH_TRIES) probe.denied = true;
               console.warn('[Proxy Auth] Max attempts (3) exceeded');
               return { cancel: true };
             }
 
             console.log('[Proxy Auth] Authenticating proxy');
-            if (!details.incognito) {
-              logger.info('auth', t("msg_proxy_authentication_7759383e", "Аутентификация прокси"), t("msg_sending_credentials_6adbc196", "Отправка учётных данных"));
-            }
+            logAuthentication();
 
             return {
               authCredentials: {
@@ -380,6 +410,7 @@ export function setupAuthListener(ensureReady = null) {
             };
           }
 
+          if (probe) probe.denied = true;
           console.warn('[Proxy Auth] No credentials found');
           return {};
         };
@@ -400,23 +431,21 @@ export function setupAuthListener(ensureReady = null) {
 
         // Compatibility path for direct/unit invocations without Chrome's
         // asyncBlocking callback. Real MV3 auth events use the durable branch.
-        const host = details.challenger.host;
-        const port = details.challenger.port;
         const creds = findCredentials(host, port);
         if (!creds || !creds.username) {
+          if (probe) probe.denied = true;
           console.warn('[Proxy Auth] No credentials found');
           return {};
         }
         const reqId = details.requestId;
         const attempt = consumeMemoryAuthAttempt(requestTries, reqId, Date.now());
         if (!attempt.allowed) {
+          if (probe && attempt.tries >= MAX_AUTH_TRIES) probe.denied = true;
           console.warn('[Proxy Auth] Max attempts (3) exceeded');
           return { cancel: true };
         }
         console.log('[Proxy Auth] Authenticating proxy');
-        if (!details.incognito) {
-          logger.info('auth', t("msg_proxy_authentication_7759383e", "Аутентификация прокси"), t("msg_sending_credentials_6adbc196", "Отправка учётных данных"));
-        }
+        logAuthentication();
         return {
           authCredentials: {
             username: String(creds.username),

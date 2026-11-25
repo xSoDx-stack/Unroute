@@ -6,6 +6,7 @@ import { settingsCoordinator } from '../src/common/core/settings-coordinator.js'
 import { storage } from '../src/common/core/storage.js';
 import { migrateSettings } from '../src/common/core/settings-schema.js';
 import { encodeSettings } from '../src/common/core/settings-codec.js';
+import { PROXY_HEALTH_CACHE_KEY } from '../src/common/core/proxy-health-cache.js';
 
 describe('Atomic domain/proxy RPC', () => {
   let listener;
@@ -35,7 +36,38 @@ describe('Atomic domain/proxy RPC', () => {
     settingsCoordinator.state = original.state;
     pacKitchen.invalidateCache();
   });
-  const send = message => new Promise(resolve => listener(message, { id: 'test' }, resolve));
+  const send = message => new Promise(resolve => listener(message, { id: 'test', url: 'chrome-extension://test/pages/options/index.html' }, resolve));
+
+  it('reports the effective list route after clearing legacy manual rules and their bindings', async () => {
+    await pacKitchen.updatePacMods(raw => ({ ...raw, ifUseLocalTor: true, ifMindExceptions: true,
+      exceptions: { 'page.test': true, '*.page.test': true, 'other.test': true },
+      domainProxyIds: { 'page.test': 'builtin:tor', '*.page.test': 'builtin:tor', 'other.test': 'builtin:tor' },
+      domainLists: [{ id: 'list:a', name: 'A', enabled: true, proxyId: 'builtin:tor', domains: ['page.test'] }],
+    }));
+    const response = await send({ action: 'SET_SINGLE_EXCEPTION', domain: 'page.test', isProxy: null });
+    expect(response.success, response.error).to.equal(true);
+    expect(response.data.removedRuleKeys).to.have.members(['page.test', '*.page.test']);
+    expect(response.data.currentSiteMatch).to.include({ matched: true, listId: 'list:a', proxyId: 'builtin:tor' });
+    expect((await pacKitchen.getRawPacMods()).domainProxyIds).to.deep.equal({ 'other.test': 'builtin:tor' });
+  });
+
+  it('does not report a committed profile edit as failed when health-cache pruning fails', async () => {
+    await pacKitchen.updatePacMods(raw => ({ ...raw, customProxyStringRaw: 'HTTPS before.test:443' }));
+    const [profile] = (await pacKitchen.getRawPacMods()).proxyProfiles;
+    const get = storage.get;
+    let pruneReads = 0;
+    storage.get = async (key, fallback) => {
+      if (key === PROXY_HEALTH_CACHE_KEY) { pruneReads++; throw new Error('Health cache unavailable'); }
+      return get(key, fallback);
+    };
+    try {
+      const response = await send({ action: 'UPDATE_PROXY_PROFILE', proxyId: profile.id, proxy: 'HTTPS after.test:443' });
+      expect(response.success, response.error).to.equal(true);
+      expect(pruneReads).to.equal(1);
+      pacKitchen.invalidateCache();
+      expect((await pacKitchen.getRawPacMods()).proxyProfiles[0]).to.include({ id: profile.id, endpoint: 'HTTPS after.test:443' });
+    } finally { storage.get = get; }
+  });
 
   it('preserves cold-loaded legacy names while enforcing the 32-point RPC write boundary atomically', async () => {
     const migrated = migrateSettings({ customProxyStringRaw: 'HTTPS a.test:443; HTTPS b.test:443', exceptions: {}, whitelist: [] });
@@ -144,12 +176,12 @@ describe('Atomic domain/proxy RPC', () => {
     expect(after._revision).to.equal(before._revision + 1);
   });
 
-  it('does not expose a separate IMPORT_SETTINGS bypass (unsupported RPC)', async () => {
+  it('rejects an unversioned IMPORT_SETTINGS payload without bypassing catalog validation', async () => {
     const before = await pacKitchen.getRawPacMods();
     const response = await send({ action: 'IMPORT_SETTINGS', settings: {
       customProxyStringRaw: Array.from({ length: 51 }, (_, i) => `HTTPS p${i}.test:443`).join('; ') } });
     expect(response.success).to.equal(false);
-    expect(response.error).to.equal('Unknown action: IMPORT_SETTINGS');
+    expect(response.errorCode).to.equal('BACKUP_INVALID');
     expect(await pacKitchen.getRawPacMods()).to.equal(before);
   });
 

@@ -14,6 +14,7 @@ export function resourceOriginHelp(route = {}) {
     case 'site': return t('popupResourceAutomatic', 'Следует общей настройке ресурсов сайта.');
     case 'main': return t('popupResourceMain', 'Основной домен: его запросы используют маршрут сайта.');
     case 'automatic-other': return t('popupResourceOtherAuto', 'Автоматическое глобальное правило ресурса другого сайта.');
+    case 'list': return t('popupResourceList', 'Правило списка доменов: $1.', [route.ruleKey || '']);
     case 'pac': return t('popupResourcePac', 'Маршрут определяет PAC; отдельного ручного правила ресурса нет.');
     default: return '';
   }

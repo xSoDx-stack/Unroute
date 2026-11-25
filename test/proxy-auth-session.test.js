@@ -61,6 +61,13 @@ describe('Proxy Authentication: durable MV3 retry state', () => {
     expect(afterTtl).to.deep.equal({ allowed: true, tries: 1 });
   });
 
+  it('keeps the session retry budget for active requests at capacity', async () => {
+    const auth = await import('../src/common/core/proxy-auth.js');
+    for (let i = 0; i < 500; i++) await auth.consumeProxyAuthAttempt(`active-${i}`, 1000 + i);
+    expect(await auth.consumeProxyAuthAttempt('new-request', 2000)).to.deep.equal({ allowed: false, tries: 0 });
+    expect(await auth.consumeProxyAuthAttempt('active-0', 2000)).to.deep.equal({ allowed: true, tries: 2 });
+  });
+
   it('clears attempts when credentials are changed', async () => {
     const auth = await import('../src/common/core/proxy-auth.js');
     await auth.consumeProxyAuthAttempt('credential-change-request', 1000);
@@ -71,5 +78,16 @@ describe('Proxy Authentication: durable MV3 retry state', () => {
     const afterChange = await auth.consumeProxyAuthAttempt('credential-change-request', 4000);
 
     expect(afterChange).to.deep.equal({ allowed: true, tries: 1 });
+  });
+
+  it('matches both IPv6 hostname forms while keeping the port scoped', async () => {
+    const auth = await import('../src/common/core/proxy-auth.js');
+    auth.registerTemporaryCredentials('[2001:db8::1]', 8443, 'fixture', 'dummy');
+    try {
+      expect(auth.findCredentials('2001:db8::1', 8443)?.username).to.equal('fixture');
+      expect(auth.findCredentials('[2001:db8::1]', 8443)?.username).to.equal('fixture');
+      expect(auth.findCredentials('2001:db8::1', 9443)).to.equal(null);
+    } finally { auth.unregisterTemporaryCredentials('2001:db8::1', 8443); }
+    expect(auth.findCredentials('[2001:db8::1]', 8443)).to.equal(null);
   });
 });

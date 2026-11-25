@@ -2,15 +2,16 @@
 
 import { expect } from 'chai';
 import { validatePacScriptSource } from '../src/common/core/pac-validator.js';
+import { Parser } from '../src/common/vendor/acorn.mjs';
 
 describe('PAC source validation', () => {
   it('scans an unchanged valid PAC once, without trusting changed or invalid text', () => {
     const source = '// validation cache regression\nfunction FindProxyForURL(){return "DIRECT";}';
-    const original = Object.prototype.hasOwnProperty;
+    const original = Parser.prototype.parse;
     let scans = 0;
-    Object.prototype.hasOwnProperty = function(key) {
-      if (key === 'function') scans++;
-      return original.call(this, key);
+    Parser.prototype.parse = function() {
+      scans++;
+      return original.call(this);
     };
     try {
       const first = validatePacScriptSource(source);
@@ -27,7 +28,7 @@ describe('PAC source validation', () => {
       expect(validatePacScriptSource(source).valid).to.equal(true);
       expect(scans).to.be.greaterThan(0, 'Only the last valid source may be cached');
     } finally {
-      Object.prototype.hasOwnProperty = original;
+      Parser.prototype.parse = original;
     }
   });
   it('accepts top-level declarations and direct function assignments', () => {
@@ -42,11 +43,27 @@ describe('PAC source validation', () => {
     ).valid).to.equal(true);
   });
 
+  it('accepts immediately invoked wrappers that return or publish the PAC function', () => {
+    for (const source of [
+      'var FindProxyForURL = (function() { return function(url, host) { return "DIRECT"; }; })();',
+      '(function() { self.FindProxyForURL = (url, host) => "DIRECT"; })();',
+    ]) expect(validatePacScriptSource(source).valid, source).to.equal(true);
+  });
+
+  it('rejects balanced but invalid JavaScript', () => {
+    expect(validatePacScriptSource('function FindProxyForURL() { const value = ; }').valid).to.equal(false);
+  });
+
   it('does not mistake comments, strings or regular expressions for PAC code', () => {
     const decoys = [
       '// function FindProxyForURL(url, host) {}',
       'const text = "function FindProxyForURL(url, host) {}";',
       'const matcher = /FindProxyForURL/;',
+      'FindProxyForURL = "DIRECT"\nfunction helper() {}',
+      'FindProxyForURL = [1, 2].map(x => x);',
+      'FindProxyForURL = (x => x)("DIRECT");',
+      'const holder = {}; holder.FindProxyForURL = function() {};',
+      '(function() { function FindProxyForURL() { return "DIRECT"; } })();',
     ];
 
     for (const source of decoys) {

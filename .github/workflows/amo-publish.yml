@@ -1,0 +1,72 @@
+name: Publish Firefox on AMO
+
+on:
+  workflow_call:
+    inputs:
+      submit:
+        description: Permit first submission; existing AMO versions are never resubmitted
+        required: false
+        type: boolean
+        default: false
+      version:
+        description: Specific release version; empty scans pending releases
+        required: false
+        type: string
+        default: ''
+    secrets:
+      # First submission is enabled only by the caller's explicit boolean input.
+      AMO_JWT_ISSUER:
+        required: true
+      AMO_JWT_SECRET:
+        required: true
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: Permit first submission or retry a failed submission
+        required: false
+        type: boolean
+        default: false
+      version:
+        description: Specific release version, e.g. 3.0.1; empty scans pending releases
+        required: false
+        type: string
+        default: ''
+  schedule:
+    - cron: '23 * * * *'
+
+permissions:
+  contents: write
+
+# A submission and the hourly check must never race to submit the same version.
+concurrency:
+  group: unroute-amo-listed-publication
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: vars.AMO_LISTED_ENABLED == 'true'
+    name: Submit or reconcile listed Firefox releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout trusted publication tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Setup Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Submit new versions or collect approved signed packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          AMO_VERSION: ${{ inputs.version }}
+          AMO_SUBMIT_NEW: ${{ inputs.submit == true }}
+        run: node .github/scripts/amo-release.mjs reconcile

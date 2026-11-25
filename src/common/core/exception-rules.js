@@ -4,7 +4,7 @@
 
 export function matchExceptionDomain(host, exceptions = {}) {
   if (!host || !exceptions || typeof exceptions !== 'object') return { matched: false };
-  host = host.toLowerCase().trim();
+  host = host.toLowerCase().trim().replace(/\.+$/, '');
 
   // 1. Direct exact match
   if (Object.prototype.hasOwnProperty.call(exceptions, host)) {

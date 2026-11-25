@@ -1,6 +1,50 @@
 {
+  "proxyEditConnection": {"message": "Изменить подключение"},
+  "proxyConnectionName": {"message": "Название"},
+  "proxyConnectionProtocol": {"message": "Протокол"},
+  "proxyConnectionHost": {"message": "Хост / IP-адрес"},
+  "proxyConnectionPort": {"message": "Порт"},
+  "proxyConnectionAuth": {"message": "Авторизация"},
+  "proxyConnectionUsername": {"message": "Логин"},
+  "proxyConnectionPassword": {"message": "Пароль"},
+  "proxyConnectionHint": {"message": "Назначения сайтов, списков и резервного прокси сохранятся. Авторизация SOCKS не поддерживается браузером."},
+  "proxyConnectionSaving": {"message": "Сохранение…"},
+  "proxyConnectionSave": {"message": "Сохранить"},
+  "proxyConnectionCancel": {"message": "Отмена"},
+  "proxyConnectionInvalidName": {"message": "Название должно содержать от 1 до 32 символов."},
+  "proxyConnectionSocksAuth": {"message": "Авторизация SOCKS не поддерживается браузером."},
+  "proxyConnectionInvalidAddress": {"message": "Проверьте адрес и порт прокси (1–65535)."},
+  "proxyConnectionSaveFailed": {"message": "Не удалось сохранить подключение. Проверьте настройки и повторите попытку."},
+  "proxyConnectionInvalidSaved": {"message": "Сохранённое подключение прокси некорректно."},
+  "dlUnsupportedInclude": {"message": "include: — неподдерживаемая ссылка geosite. Укажите явные домены; ссылки не разворачиваются."},
+  "dlRawInvalid": {"message": "Не сохранено. Ошибочных строк: $1 (первая: $2). Исправьте подсвеченные строки."},
   "dlErrorInvalid": {"message": "Некорректные данные листа. Проверьте название, домены и порядок листов."},
+  "dlNameExists": {"message": "Лист с таким названием уже существует. Выберите другое имя."},
+  "dlImportedName": {"message": "Лист"},
   "dlErrorUnknown": {"message": "Лист больше не существует. Обновите данные и повторите действие."},
+  "proxyFailoverLabel": {"message": "Если прокси недоступен"},
+  "proxyFailoverSummary": {"message": "Только для своих доменов. Остальной трафик без изменений."},
+  "proxyFailoverHint": {"message": "Меняется маршрут только запросов отказавшего прокси. Остальные правила сохраняются. Если резервный прокси тоже недоступен, соединение блокируется."},
+  "proxyFailoverBlock": {"message": "Блокировать соединение"},
+  "proxyFailoverDirect": {"message": "Напрямую · без защиты прокси"},
+  "proxyFailoverReserve": {"message": "Резервный прокси"},
+  "portableSettingsTitle": {"message": "Перенос настроек"},
+  "portableSettingsDescription": {"message": "Все настройки и списки в одном JSON-файле."},
+  "portableSettingsExport": {"message": "Экспорт"},
+  "portableSettingsImport": {"message": "Импорт"},
+  "portable_settings_warning": {"message": "Внимание: JSON не зашифрован и содержит логины и пароли всех прокси. Не публикуйте файл."},
+  "portable_settings_failed": {"message": "Операция не выполнена. Проверьте файл настроек и повторите попытку."},
+  "portable_settings_exported": {"message": "Резервная копия сохранена. Храните файл с паролями в безопасном месте."},
+  "portable_settings_too_large": {"message": "Файл настроек слишком большой (максимум 64 МиБ)."},
+  "portable_settings_replace_confirm": {"message": "Импорт заменит все текущие настройки, прокси и списки. Несохранённые черновики будут сброшены. Продолжить?"},
+  "portable_settings_pending": {"message": "Настройки сохранены; применение PAC ожидает повторной попытки."},
+  "backup_error_invalid": {"message": "Некорректный или неподдерживаемый файл настроек."},
+  "backup_error_export_failed": {"message": "Не удалось создать резервную копию настроек."},
+  "backup_error_import_failed": {"message": "Не удалось импортировать настройки."},
+  "backup_error_storage_failed": {"message": "Не удалось сохранить импорт. Предыдущие настройки восстановлены."},
+  "backup_error_rollback_failed": {"message": "Не удалось подтвердить восстановление настроек. Повторите импорт."},
+  "portable_settings_imported": {"message": "Настройки восстановлены и применены."},
+  "proxyFailoverDirectConfirm": {"message": "При отказе прокси запросы пойдут напрямую: сайты увидят ваш IP-адрес. Разрешить?"},
   "dlBack": {"message": "← Сайты"},
   "dlManual": {"message": "Ручные правила"},
   "dlAdd": {"message": "Добавить лист"},
@@ -40,10 +84,13 @@
   "mpErrorUnavailable": {"message": "Выберите включённый прокси, разрешённый текущими ограничениями."},
   "mpErrorReplacement": {"message": "Перед удалением выберите прокси для переноса привязанных сайтов и настройки по умолчанию."},
   "mpErrorConflict": {"message": "Список изменён или устарел. Обновите данные и повторите действие; черновик сохранён."},
+  "mpErrorFailover": {"message": "Некорректный режим резервирования для сайтов с собственным прокси."},
+  "mpErrorResourceRevision": {"message": "Правила ресурсов изменились. Обновите данные и повторите действие."},
+  "mpErrorResourceInheritance": {"message": "Наследование маршрута для этого сайта недоступно при текущих настройках."},
   "mpErrorChoice": {"message": "Выберите прокси для новых сайтов."},
   "mpErrorRules": {"message": "Некорректный список изменений сайтов. Проверьте домены и режимы."},
   "mpErrorMissingRule": {"message": "Один из сайтов больше не находится в списке проксируемых. Обновите список."},
-  "mpRename": {"message": "Переименовать"},
+
   "mpReadbackFailed": {"message": "Сохранено · обновите данные"},
   "mpDeleteReplace": {"message": "Удалить прокси · перенести сайты на"},
   "mpChooseReplacement": {"message": "Выберите замену явно"},
@@ -78,6 +125,7 @@
   "popupResourceOtherAuto": {"message": "Автоматическое глобальное правило ресурса другого сайта."},
   "popupResourcePac": {"message": "Маршрут определяет PAC; отдельного ручного правила ресурса нет."},
   "popupResourceReset": {"message": "Убрать исключение"},
+  "popupResourceList": {"message": "Правило списка доменов: $param_1$.", "placeholders": {"param_1": {"content": "$1"}}},
   "popupResourceResetHelp": {"message": "Удаляется только ручное правило этого точного домена. Оставшиеся wildcard-правила сохраняются; иначе действует настройка ресурсов сайта."},
   "popupResourceResetSaved": {"message": "Точное правило сброшено. Перезагрузите сайт, чтобы обновить соединения."},
   "popupResourceInheritanceHelp": {"message": "«Как у сайта»: автоматические ресурсы наследуют маршрут основного домена. «Без прокси»: идут напрямую. Ручные исключения сохраняются."},
@@ -109,7 +157,7 @@
   "fidelity_route_resources_proxy": {"message": "Сайт и ресурсы — через прокси"},
   "fidelity_route_resources_direct": {"message": "Сайт и ресурсы — напрямую"},
   "fidelity_logs": {"message": "Журнал"},
-  "fidelity_check": {"message": "Проверка"},
+  "fidelity_check": {"message": "Инструменты"},
   "fidelity_information": {"message": "Информация"},
   "fidelity_history": {"message": "История"},
   "fidelity_connection_intro": {"message": "Выберите, кто определяет маршрут для сайтов."},
@@ -222,14 +270,6 @@
   "msg_the_browser_reported_an_error_in_the_pac_scri_da596bbd": {
     "message": "Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении",
     "description": "User-visible text. Source: Браузер сообщил об ошибке в PAC-скрипте или прокси-соединении"
-  },
-  "msg_pac_script_proxy_error_bbf4ab9f": {
-    "message": "Ошибка PAC-скрипта / Прокси",
-    "description": "User-visible text. Source: Ошибка PAC-скрипта / Прокси"
-  },
-  "msg_the_proxy_server_reported_an_error_a84dd4de": {
-    "message": "Прокси-сервер сообщил об ошибке",
-    "description": "User-visible text. Source: Прокси-сервер сообщил об ошибке"
   },
   "msg_unexpected_extension_error_7188d268": {
     "message": "Непредвиденная ошибка расширения",
@@ -452,7 +492,7 @@
     "description": "User-visible text. Source: проксируй или умри!"
   },
   "msg_prevent_direct_connections_when_the_proxy_fai_3300e70c": {
-    "message": "Запрещает прямое соединение без прокси в случаях, когда прокси отказывает.",
+    "message": "Действует только для PAC-скрипта: запрещает прямое соединение без прокси, когда прокси из PAC отказывает. Поведение своих прокси настраивается отдельно.",
     "description": "User-visible text. Source: Запрещает прямое соединение без прокси в случаях, когда прокси отказывает."
   },
   "msg_use_pac_script_proxies_e9b3b8f2": {
@@ -669,15 +709,7 @@
     "message": "PAC-скрипт пуст",
     "description": "User-visible text. Source: PAC-скрипт пуст"
   },
-  "msg_the_pac_script_contains_an_unmatched_characte_9e5e2c33": {
-    "message": "PAC-скрипт содержит непарный символ: $param_1$",
-    "description": "User-visible text. Source: PAC-скрипт содержит несогласованный символ $SUB$",
-    "placeholders": {
-      "param_1": {
-        "content": "$1"
-      }
-    }
-  },
+
   "msg_the_pac_script_contains_a_syntax_error_sub_85eec82d": {
     "message": "PAC-скрипт содержит синтаксическую ошибку: $param_1$",
     "description": "User-visible text. Source: PAC-скрипт содержит синтаксическую ошибку: $SUB$",
@@ -687,10 +719,7 @@
       }
     }
   },
-  "msg_the_pac_script_is_incomplete_unclosed_bracket_06ee6586": {
-    "message": "PAC-скрипт оборван: не закрыты скобки или блоки",
-    "description": "User-visible text. Source: PAC-скрипт оборван: не закрыты скобки или блоки"
-  },
+
   "msg_the_response_does_not_contain_an_executable_f_428979a2": {
     "message": "Ответ не содержит исполняемую функцию FindProxyForURL",
     "description": "User-visible text. Source: Ответ не содержит исполняемую функцию FindProxyForURL"
@@ -1432,14 +1461,7 @@
     "message": "Не удалось скопировать в буфер обмена",
     "description": "User-visible text. Source: Не удалось скопировать в буфер обмена"
   },
-  "msg_the_log_is_empty_nothing_to_copy_99cda969": {
-    "message": "Логи пусты — нечего копировать",
-    "description": "User-visible text. Source: Логи пусты — нечего копировать"
-  },
-  "msg_the_log_is_empty_nothing_to_export_0e05bccf": {
-    "message": "Логи пусты — нечего экспортировать",
-    "description": "User-visible text. Source: Логи пусты — нечего экспортировать"
-  },
+
   "msg_log_file_exported_4f456a34": {
     "message": "✓ Файл логов успешно выгружен!",
     "description": "User-visible text. Source: ✓ Файл логов успешно выгружен!"
@@ -1721,10 +1743,7 @@
     "message": "🛡️ Ошибок не зафиксировано",
     "description": "User-visible text. Source: 🛡️ Ошибок не зафиксировано"
   },
-  "msg_try_changing_the_category_or_clearing_the_sea_5ae7e689": {
-    "message": "Попробуйте изменить категорию или очистить поисковый запрос",
-    "description": "User-visible text. Source: Попробуйте изменить категорию или очистить поисковый запрос"
-  },
+
   "msg_network_requests_proxies_and_pac_scripts_are__8ccd866d": {
     "message": "Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме",
     "description": "User-visible text. Source: Все сетевые запросы, прокси и PAC-скрипты работают в штатном режиме"
@@ -1761,10 +1780,6 @@
         "content": "$1"
       }
     }
-  },
-  "msg_copy_this_entry_21bc6d3d": {
-    "message": "Скопировать эту запись",
-    "description": "User-visible text. Source: Скопировать эту запись"
   },
   "msg_copy_this_log_entry_3c7795fa": {
     "message": "Скопировать эту запись журнала",
@@ -2357,7 +2372,7 @@
     "description": "Static interface text or accessible attribute."
   },
   "msg_prevent_direct_connections_when_the_proxy_fai_d6445a44": {
-    "message": "Запрещает прямое соединение при сбое прокси",
+    "message": "Действует только для PAC-скрипта: запрещает прямое соединение при сбое его прокси",
     "description": "Static interface text or accessible attribute."
   },
   "msg_onion_i2p_and_opennic_domains_87d2d453": {
@@ -2430,18 +2445,12 @@
     "message": "Обновить список логов",
     "description": "Static interface text or accessible attribute."
   },
-  "msg_copy_all_log_entries_to_the_clipboard_aa89a048": {
-    "message": "Скопировать все логи в буфер обмена",
-    "description": "Static interface text or accessible attribute."
-  },
+
   "msg_copy_1ecddf40": {
     "message": "Копировать",
     "description": "Static interface text or accessible attribute."
   },
-  "msg_download_log_entries_as_a_text_file_5867f34f": {
-    "message": "Скачать логи в текстовый файл",
-    "description": "Static interface text or accessible attribute."
-  },
+
   "msg_export_d2ab5a1b": {
     "message": "Экспорт",
     "description": "Static interface text or accessible attribute."
@@ -2460,7 +2469,7 @@
   },
 
   "msg_check_your_connection_and_reset_settings_9d9c231f": {
-    "message": "Проверка состояния соединения и сброс настроек.",
+    "message": "Перенос настроек, проверка подключения и сброс.",
     "description": "Static interface text or accessible attribute."
   },
   "msg_connection_check_f00dcb8e": {
@@ -2638,7 +2647,7 @@
   "settings_help_nav_mods": {"message": "Изменить ограничения маршрутизации PAC."},
   "settings_help_nav_logs": {"message": "Просмотреть ошибки сети, PAC и прокси."},
   "settings_help_nav_history": {"message": "Просмотреть изменения правил и отменить доступные операции."},
-  "settings_help_nav_tools": {"message": "Открыть диагностику, код PAC и сброс настроек."},
+  "settings_help_nav_tools": {"message": "Перенести настройки, проверить подключение, открыть код PAC или выполнить сброс."},
   "settings_help_nav_notifications": {"message": "Выбрать уведомления об ошибках и потере контроля."},
   "settings_help_nav_appearance": {"message": "Настроить тему и акцентный цвет интерфейса."},
   "settings_help_provider_az": {"message": "Использовать правила Антизапрета для обхода блокировок."},
@@ -2713,7 +2722,9 @@
   "settings_help_proxy_add": {"message": "Проверить доступность и сохранить новый прокси."},
   "settings_help_proxy_check_all": {"message": "Повторно проверить доступность настроенных прокси."},
   "settings_help_proxy_check": {"message": "Повторно проверить доступность этого прокси."},
-  "settings_help_proxy_rename": {"message": "Открыть редактор названия этого прокси."},
+  "settings_help_proxy_edit": {"message": "Открыть редактор подключения, сохранив назначения прокси."},
+  "settings_help_proxy_connection_save": {"message": "Сохранить изменения подключения прокси."},
+
   "settings_help_proxy_delete": {"message": "Выбрать замену и подготовить удаление этого прокси."},
   "settings_help_proxy_replace": {"message": "Выбрать прокси, на который будут перенесены зависимые сайты."},
   "settings_help_proxy_submit": {"message": "Применить переименование или удаление с выбранной заменой."},
@@ -2727,7 +2738,7 @@
   "settings_help_https": {"message": "Не направлять HTTP-сайты через прокси."},
   "settings_help_secure": {"message": "Ограничить цепочку прокси защищёнными транспортами."},
   "settings_help_dns": {"message": "Запретить DNS-запросы из PAC-скрипта."},
-  "settings_help_fail_closed": {"message": "Не переходить на прямое соединение при сбое прокси."},
+  "settings_help_fail_closed": {"message": "Блокирует прямое соединение при сбое прокси из PAC-скрипта или ошибке самого PAC. Поведение своих прокси настраивается отдельно во вкладке «Прокси»."},
   "settings_help_special": {"message": "Направлять особые доменные зоны через прокси."},
   "settings_help_notify_pac": {"message": "Показывать уведомления об ошибках PAC."},
   "settings_help_notify_ext": {"message": "Показывать уведомления об ошибках расширения."},
@@ -2740,9 +2751,25 @@
   "settings_help_logs_system": {"message": "Показать только системные события."},
   "settings_help_logs_search": {"message": "Найти записи журнала по тексту ошибки, домену или URL."},
   "settings_help_logs_search_clear": {"message": "Убрать поисковый запрос и снова показать записи категории."},
+  "logs_category_rules": {"message": "Правила"},
+  "logs_category_backup": {"message": "Резервные копии"},
+  "logs_level_label": {"message": "Уровень журнала"},
+  "logs_level_all": {"message": "Все уровни"},
+  "logs_refresh_failed": {"message": "Не удалось обновить журнал"},
+  "logs_export_failed": {"message": "Не удалось подготовить записи журнала"},
+  "logs_no_matching_entries": {"message": "Нет записей по выбранным фильтрам"},
+  "logs_try_changing_filters": {"message": "Измените категорию или уровень либо очистите поиск."},
+  "logOperationRulesFailed": {"message": "Не удалось изменить правила маршрутизации"},
+  "logOperationSettingsFailed": {"message": "Не удалось применить настройки"},
+  "logOperationBackupFailed": {"message": "Не удалось выполнить операцию с резервной копией"},
+  "logOperationProxyFailed": {"message": "Не удалось изменить профиль прокси"},
+  "settings_help_logs_rules": {"message": "Показать только события правил маршрутизации."},
+  "settings_help_logs_settings": {"message": "Показать только события настроек."},
+  "settings_help_logs_backup": {"message": "Показать только события резервного копирования."},
+  "settings_help_logs_level": {"message": "Отфильтровать записи журнала по уровню важности."},
   "settings_help_logs_refresh": {"message": "Заново прочитать записи журнала."},
-  "settings_help_logs_copy": {"message": "Скопировать журнал в буфер обмена."},
-  "settings_help_logs_export": {"message": "Скачать журнал в текстовый файл."},
+  "settings_help_logs_copy_filtered": {"message": "Скопировать все записи по выбранным фильтрам в буфер обмена."},
+  "settings_help_logs_export_filtered": {"message": "Скачать все записи по выбранным фильтрам в текстовый файл."},
   "settings_help_logs_clear": {"message": "Удалить сохранённые записи журнала после подтверждения."},
   "settings_help_log_copy": {"message": "Скопировать текст и подробности этой записи журнала."},
   "settings_help_log_expand": {"message": "Показать или скрыть подробности этой записи."},
@@ -2757,5 +2784,55 @@
   "settings_help_hex": {"message": "Задать свой акцентный цвет кодом #RGB или #RRGGBB."},
   "settings_help_appearance_retry": {"message": "Повторить сохранение выбранного оформления в браузере."},
   "settings_help_apply_retry": {"message": "Повторить применение сохранённых настроек браузером."},
-  "settings_help_private": {"message": "Открыть настройки разрешения работы в приватных окнах Firefox."}
+  "settings_help_private": {"message": "Открыть настройки разрешения работы в приватных окнах Firefox."},
+  "diag_proxy_named": {"message": "«$1» ($2)"},
+  "diag_pac_antizapret": {"message": "PAC «Антизапрет»"},
+  "diag_pac_anticensority": {"message": "PAC «Антицензорити»"},
+  "diag_pac_only_own": {"message": "Только свои сайты"},
+  "diag_pac_custom_host": {"message": "Свой PAC ($1)"},
+  "diag_pac_custom": {"message": "Свой PAC"},
+  "diag_proxy_local_tor": {"message": "Локальный Tor ($1)"},
+  "diag_proxy_local_warp": {"message": "Cloudflare WARP ($1)"},
+  "diag_proxy_deleted": {"message": "удалённый профиль прокси"},
+  "diag_proxy_assigned_unavailable": {"message": "назначенный профиль"},
+  "diag_rule_list_named": {"message": "лист «$1» ($2)"},
+  "diag_rule_manual": {"message": "правило «$1»"},
+  "diag_nav_blocked_assigned_title": {"message": "Заблокировано: прокси $1 недоступен → $2"},
+  "diag_nav_blocked_assigned_msg": {"message": "Назначенный для «$1» прокси $2 отключён или отфильтрован настройкой шифрования ($3)."},
+  "diag_nav_blocked_policy_title": {"message": "Заблокировано политикой отказа ($1) → $2"},
+  "diag_nav_blocked_policy_msg": {"message": "Для «$1» не осталось доступных прокси после фильтрации; прямое соединение запрещено ($2)."},
+  "diag_nav_pac_endpoint_title": {"message": "Сбой прокси $1 ($2) → $3"},
+  "diag_nav_pac_endpoint_msg": {"message": "Не удалось открыть «$1» через прокси из $2 ($3): $4. Это не означает, что весь PAC недоступен."},
+  "diag_nav_own_endpoint_title": {"message": "Сбой прокси $1 → $2"},
+  "diag_nav_own_endpoint_msg": {"message": "Не удалось открыть «$1» через прокси $2 ($3). Проверьте доступность этого прокси во вкладке «Прокси»."},
+  "diag_nav_own_with_reserve_title": {"message": "Сбой основного и резервного прокси: $1 → $2"},
+  "diag_nav_own_with_reserve_msg": {"message": "Не удалось открыть «$1» ($2): не ответили ни основной прокси $3, ни резервный $4 ($5)."},
+  "diag_nav_assigned_msg": {"message": "Не удалось открыть «$1» ($2) через прокси $3 ($4). Проверьте доступность прокси во вкладке «Прокси»."},
+  "diag_nav_tor_msg": {"message": "Не удалось открыть «$1» через $2 ($3). Убедитесь, что локальная служба Tor запущена."},
+  "diag_nav_pool_msg": {"message": "Не удалось открыть «$1» ($2) через настроенные прокси: $3 ($4)."},
+  "diag_nav_no_own_proxies_title": {"message": "Заблокировано: нет доступных своих прокси → $1"},
+  "diag_nav_no_own_proxies_msg": {"message": "Для «$1» ($2) требуется свой прокси, но список доступных прокси пуст ($3)."},
+  "diag_nav_own_and_pac_title": {"message": "Сбой маршрута (свои прокси + $1) → $2"},
+  "diag_nav_own_and_pac_msg": {"message": "Не удалось открыть «$1»: не ответили ни свои прокси ($2), ни прокси из $3 ($4)."},
+  "diag_nav_pac_title": {"message": "Сбой прокси $1 → $2"},
+  "diag_nav_pac_msg": {"message": "Не удалось выполнить отдельный запрос к «$1» через прокси из $2 ($3). Это не означает, что прокси-сервер PAC недоступен целиком."},
+  "diag_browser_pac_err_code": {"message": "Ошибка $1: $2"},
+  "diag_browser_pac_err": {"message": "Ошибка выполнения $1"},
+  "diag_browser_pac_msg": {"message": "Браузер сообщил об ошибке загрузки или выполнения скрипта $1."},
+  "diag_browser_pac_proxy_err": {"message": "Сбой прокси $1 ($2): $3"},
+  "diag_browser_pac_proxy_msg": {"message": "Браузер сообщил о сбое соединения с прокси из $1 ($2)."},
+  "diag_browser_own_proxy_err": {"message": "Сбой прокси $1: $2"},
+  "diag_browser_own_proxy_msg": {"message": "Браузер не смог подключиться к прокси $1."},
+  "diag_browser_own_only_msg": {"message": "Браузер сообщил о сбое соединения с настроенным прокси ($1)."},
+  "diag_browser_pac_conn_err": {"message": "Сбой прокси $1: $2"},
+  "diag_browser_pac_conn_msg": {"message": "Браузер не смог установить соединение с прокси-сервером из $1."},
+  "diag_browser_mixed_err": {"message": "Сбой прокси ($1 / свои прокси): $2"},
+  "diag_browser_mixed_msg": {"message": "Браузер сообщил о сбое прокси-соединения. Активны $1 и свои прокси ($2)."},
+  "diag_meta_proxy": {"message": "Прокси"},
+  "diag_meta_reserve": {"message": "Резерв"},
+  "diag_meta_site": {"message": "Сайт"},
+  "diag_meta_rule": {"message": "Правило"},
+  "sitesToggleWildcard": {"message": "± *."},
+  "settings_help_site_wildcard_bulk": {"message": "Добавить или убрать префикс *. у выбранных доменов."},
+  "settings_help_site_wildcard_raw": {"message": "Добавить или убрать префикс *. у домена в текущей строке или выделении."}
 }

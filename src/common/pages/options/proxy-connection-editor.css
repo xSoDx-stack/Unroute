@@ -1,0 +1,14 @@
+/* Options-native compact settings form; inherits shared light/dark tokens. */
+.proxy-connection-editor { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; }
+.proxy-connection-editor legend { padding: 0 4px; font-size: 12px; font-weight: 600; }
+.proxy-connection-editor form { min-width: 0; width: 100%; }
+.proxy-connection-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px 12px; }
+.proxy-connection-field { display: block; min-width: 0; }
+.proxy-connection-field .form-label { margin: 0 0 4px; }
+.proxy-connection-field input,.proxy-connection-field select { box-sizing: border-box; width: 100%; min-width: 0; }
+.proxy-connection-editor .auth-checkbox-row input { flex: none; width: auto; min-width: 0; }
+.proxy-connection-editor .muted { margin: 8px 0; font-size: 11px; overflow-wrap: anywhere; }
+.proxy-connection-error { margin: 8px 0; font-size: 12px; color: var(--danger); overflow-wrap: anywhere; }
+.proxy-connection-error:empty { display: none; }
+.proxy-connection-editor .proxy-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 520px) { .proxy-connection-grid { grid-template-columns: minmax(0,1fr); } }

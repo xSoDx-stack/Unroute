@@ -29,14 +29,17 @@ describe('Independent domain-list routing', () => {
   });
   it('routes a list profile in Firefox without requiring the legacy proxy pool', async () => {
     const saved = { chrome: globalThis.chrome, get: pacKitchen.getPacMods, settings: proxyBackend.getSettings };
+    const getCachedMods = pacKitchen.getCachedMods;
     try {
+      pacKitchen.getCachedMods = () => null;
       pacKitchen.getPacMods = async () => fixture();
       proxyBackend.getSettings = async () => ({ levelOfControl: 'controlled_by_this_extension', value: { proxyType: 'autoConfig' } });
       globalThis.chrome = { runtime: {}, tabs: { get: (_, cb) => cb({ url: 'https://example.com/' }) } };
       const router = new TabProxyRouter();
-      expect(await router.handle({ url: 'https://example.com/', tabId: 1, type: 'main_frame' })).to.deep.equal([{ type: 'https', host: 'a.test', port: 443 }]);
-      expect(await router.handle({ url: 'https://new.test/', tabId: 1, type: 'image' })).to.deep.equal([{ type: 'https', host: 'a.test', port: 443 }]);
+      expect(await router.handle({ url: 'https://example.com/', tabId: 1, type: 'main_frame' })).to.deep.equal([{ type: 'https', host: 'a.test', port: 443 }, null]);
+      expect(await router.handle({ url: 'https://new.test/', tabId: 1, type: 'image' })).to.deep.equal([{ type: 'https', host: 'a.test', port: 443 }, null]);
     } finally {
+      pacKitchen.getCachedMods = getCachedMods;
       globalThis.chrome = saved.chrome;
       pacKitchen.getPacMods = saved.get;
       proxyBackend.getSettings = saved.settings;
@@ -125,8 +128,10 @@ describe('Independent domain-list routing', () => {
   });
   it('keeps Firefox parity for disabled/unavailable lists, manual routes, PAC and policy', async () => {
     const saved = { chrome: globalThis.chrome, get: pacKitchen.getPacMods, settings: proxyBackend.getSettings };
+    const getCachedMods = pacKitchen.getCachedMods;
     let mods;
     try {
+      pacKitchen.getCachedMods = () => null;
       pacKitchen.getPacMods = async () => mods;
       proxyBackend.getSettings = async () => ({ levelOfControl: 'controlled_by_this_extension', value: { proxyType: 'autoConfig' } });
       globalThis.chrome = { runtime: {}, tabs: { get: (_, cb) => cb({ url: 'https://example.com/' }) } };
@@ -153,6 +158,7 @@ describe('Independent domain-list routing', () => {
       mods = { ...fixture(), ifMindWhitelist: true, whitelist: [] };
       expect(await request()).to.equal(null);
     } finally {
+      pacKitchen.getCachedMods = getCachedMods;
       globalThis.chrome = saved.chrome;
       pacKitchen.getPacMods = saved.get;
       proxyBackend.getSettings = saved.settings;

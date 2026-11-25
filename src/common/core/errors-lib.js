@@ -22,28 +22,30 @@ export function clarify(err, message, { data } = {}) {
   return warn;
 }
 
-export function formatErrorMessage(err) {
-  if (!err) return '';
-  if (typeof err === 'string') return err;
-  let msg = err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-  let wrapped = err.wrapped;
-  while (wrapped) {
-    const deeper = wrapped.message || (typeof wrapped === 'object' ? JSON.stringify(wrapped) : String(wrapped));
-    if (deeper && deeper !== msg) {
-      msg += ' > ' + deeper;
-    }
-    wrapped = wrapped.wrapped;
+function* errorChain(err) {
+  const seen = new Set();
+  for (let current = err; current && !seen.has(current) && seen.size < 32; current = current.wrapped) {
+    seen.add(current);
+    yield current;
   }
-  return msg;
+}
+
+export function formatErrorMessage(err) {
+  const messages = [];
+  for (const current of errorChain(err)) {
+    let text;
+    try { text = current.message || (typeof current === 'object' ? JSON.stringify(current) : String(current)); }
+    catch { text = '[Unserializable error]'; }
+    if (text && messages.at(-1) !== text) messages.push(text);
+  }
+  return messages.join(' > ');
 }
 
 export function getErrorCode(err) {
-  let current = err;
-  while (current) {
+  for (const current of errorChain(err)) {
     if (typeof current.code === 'string' && current.code) {
       return current.code;
     }
-    current = current.wrapped;
   }
   return '';
 }

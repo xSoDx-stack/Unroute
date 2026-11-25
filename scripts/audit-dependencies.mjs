@@ -2,13 +2,17 @@ import { spawnSync } from 'node:child_process';
 import { findBlockingVulnerabilities } from './audit-policy.mjs';
 
 const npmCli = process.env.npm_execpath;
-const auditCommand = npmCli ? process.execPath : 'npm';
+const useWindowsShim = !npmCli && process.platform === 'win32';
+const auditCommand = npmCli ? process.execPath : useWindowsShim ? 'npm audit --json --audit-level=high' : 'npm';
 const auditArgs = npmCli
   ? [npmCli, 'audit', '--json', '--audit-level=high']
-  : ['audit', '--json', '--audit-level=high'];
+  : useWindowsShim ? [] : ['audit', '--json', '--audit-level=high'];
 const audit = spawnSync(auditCommand, auditArgs, {
   encoding: 'utf8',
   windowsHide: true,
+  // Direct invocation on Windows resolves npm through its command shim.
+  // The command and arguments in this branch are fixed literals.
+  shell: useWindowsShim,
   maxBuffer: 16 * 1024 * 1024,
 });
 

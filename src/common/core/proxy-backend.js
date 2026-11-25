@@ -1,32 +1,11 @@
 'use strict';
 
 import { t } from './i18n.js';
+import { addBrowserListener, callBrowserMethod } from './browser-api.js';
 
 function callProxySetting(method, details) {
-  return new Promise((resolve, reject) => {
-    const settings = chrome.proxy && chrome.proxy.settings;
-    if (!settings || typeof settings[method] !== 'function') {
-      reject(new Error(t("msg_the_browser_does_not_support_proxy_settings_s_c3082d3d", "Браузер не поддерживает proxy.settings.$1()", [method])));
-      return;
-    }
-
-    settings[method](details, (result) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(result);
-    });
-  });
-}
-
-function addEventListener(event, listener) {
-  if (!event || typeof event.addListener !== 'function') return false;
-  if (typeof event.hasListener === 'function' && event.hasListener(listener)) {
-    return true;
-  }
-  event.addListener(listener);
-  return true;
+  return callBrowserMethod(chrome.proxy?.settings, method, [details], () =>
+    t("msg_the_browser_does_not_support_proxy_settings_s_c3082d3d", "Браузер не поддерживает proxy.settings.$1()", [method]));
 }
 
 /**
@@ -59,7 +38,7 @@ export const proxyBackend = {
   },
 
   async restore(details) {
-    if (details && details.value) {
+    if (details?.levelOfControl === 'controlled_by_this_extension' && details.value) {
       await callProxySetting('set', {
         value: details.value,
         scope: 'regular',
@@ -80,11 +59,11 @@ export const proxyBackend = {
   },
 
   addSettingsChangeListener(listener) {
-    return addEventListener(chrome.proxy?.settings?.onChange, listener);
+    return addBrowserListener(chrome.proxy?.settings?.onChange, listener);
   },
 
   addErrorListener(listener) {
-    return addEventListener(chrome.proxy?.onProxyError, listener);
+    return addBrowserListener(chrome.proxy?.onProxyError, listener);
   },
 
   async getCapabilities() {

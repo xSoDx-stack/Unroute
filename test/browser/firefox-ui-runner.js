@@ -1,4 +1,4 @@
-/* global checkSitesEditor, sendFirefoxFixtureMessage, checkLimitsAndHelp, checkDomainListsNative */
+/* global checkSitesEditor, sendFirefoxFixtureMessage, checkLimitsAndHelp, checkDomainListsNative, checkProxyFailover */
 // Copied only into the temporary Firefox test extension. BiDi deliberately
 // does not expose extension documents; run DOM checks in their own context.
 export async function runFirefoxUiChecks(reportUrl, ownProxy, requestedLocale, networkConfig) {
@@ -13,7 +13,47 @@ export async function runFirefoxUiChecks(reportUrl, ownProxy, requestedLocale, n
   };
   const get = id => document.getElementById(id);
   const send = sendFirefoxFixtureMessage;
+  const failoverProofs = [];
   try {
+    if (networkConfig?.failoverOnly) {
+      await wait(() => get('extVersion')?.textContent && get('proxyFailoverSelect'));
+      const proofs = await checkProxyFailover({ proofs: failoverProofs, ...networkConfig, suffix: 'localhost', send,
+        select: async value => {
+          await wait(() => [...get('proxyFailoverSelect').options].some(option => option.value === value));
+          if (value === 'direct') window.confirm = () => true;
+          get('proxyFailoverSelect').value = value;
+          get('proxyFailoverSelect').dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(() => !get('proxyFailoverSelect').disabled && document.body.getAttribute('aria-busy') !== 'true');
+        },
+        probe: async url => {
+          let error = null;
+          const observe = details => { if (details.url === url) error = details.error; };
+          browser.webRequest.onErrorOccurred.addListener(observe, { urls: ['<all_urls>'], types: ['main_frame'] });
+          const tab = await browser.tabs.create({ url, active: false });
+          try {
+            await wait(async () => { const current = await browser.tabs.get(tab.id); return error || (current.status === 'complete' && current.url === url); });
+            if (error) {
+              // A tab-associated request takes Firefox's native onRequest
+              // path. Compare its failure with an extension-background fetch,
+              // which has no tab association and therefore uses native PAC.
+              let pacDiagnostic;
+              if (url.endsWith('/proxy-failover-refused-explicit-direct')) {
+                const pacUrl = url + '-pac-diagnostic';
+                try { pacDiagnostic = { url: pacUrl, body: await (await fetch(pacUrl, {cache:'no-store'})).text(), error: null }; }
+                catch (cause) { pacDiagnostic = { url: pacUrl, body: null, error: cause.message }; }
+              }
+              return { body: null, error, ...(pacDiagnostic ? {pacDiagnostic} : {}) };
+            }
+            return { body: (await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => document.body.textContent }))[0].result, error: null };
+          } finally {
+            browser.webRequest.onErrorOccurred.removeListener(observe);
+            await browser.tabs.remove(tab.id);
+          }
+        },
+      });
+      await report({ done: true, uiDone: true, stage: 'proxy-failover-pass', proofs });
+      return;
+    }
     const resourceTest = new URL(location.href).searchParams;
     if (resourceTest.has('resourceProxyTest')) {
       const tabId = Number(resourceTest.get('tabId'));
@@ -364,5 +404,5 @@ export async function runFirefoxUiChecks(reportUrl, ownProxy, requestedLocale, n
     await browser.tabs.update(webTab.id, { active: true });
     await browser.tabs.create({ url: browser.runtime.getURL('pages/popup/index.html'), active: false });
     await report({ stage: 'ui-settings', size: `${innerWidth}x${innerHeight}`, checks: 'PAC/proxy layout, drafts, collapsed enabled hint; Sites: ' + sitesChecks + '; Limits/help: ' + limitsHelp });
-  } catch (error) { await report({ uiDone: true, error: error.message, stack: error.stack }); }
+  } catch (error) { await report({ uiDone: true, error: error.message, stack: error.stack, ...(networkConfig?.failoverOnly ? { proofs: failoverProofs } : {}) }); }
 }
