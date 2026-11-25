@@ -131,4 +131,89 @@ describe('Chrome Web Store API v2 publication', () => {
     expect(result.publishState).to.equal('PENDING_REVIEW');
     expect(endpoints).to.have.lengthOf(5);
   });
+
+  it('retries :publish when CWS draft indexing lags with HTTP 400 right after :upload', async () => {
+    const { bytes, sha256 } = await makeChromeZip({ manifest_version: 3, version: '3.0.2', name: 'Unroute' });
+    let publishCalls = 0;
+    const delays = [];
+    const fetcher = async url => {
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return jsonResponse({ access_token: 'tok-3' });
+      }
+      if (url.endsWith(':fetchStatus')) {
+        return jsonResponse({
+          publishedItemRevisionStatus: { state: 'PUBLISHED', distributionChannels: [{ crxVersion: '3.0.1' }] },
+        });
+      }
+      if (url.endsWith(':upload')) {
+        return jsonResponse({ uploadState: 'SUCCEEDED', crxVersion: '3.0.2' });
+      }
+      if (url.endsWith(':publish')) {
+        publishCalls += 1;
+        if (publishCalls < 3) {
+          return jsonResponse({
+            error: { message: 'Your submission does not meet the requirements to be published in the store.' },
+          }, 400);
+        }
+        return jsonResponse({ state: 'PENDING_REVIEW' });
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    };
+
+    const result = await publishToCws({
+      version: '3.0.2',
+      publisherId: 'pub-1',
+      extensionId: 'ext-1',
+      clientId: 'cid',
+      clientSecret: 'csec',
+      refreshToken: 'rtok',
+      zipBytes: bytes,
+      expectedSha256: sha256,
+      fetcher,
+      sleep: async ms => { delays.push(ms); },
+      publishRetryDelayMs: 5000,
+    });
+
+    expect(publishCalls).to.equal(3);
+    expect(delays).to.deep.equal([5000, 10000]);
+    expect(result.action).to.equal('submitted');
+    expect(result.publishState).to.equal('PENDING_REVIEW');
+  });
+
+  it('does not retry :publish on non-retryable HTTP 403 permission error', async () => {
+    const { bytes, sha256 } = await makeChromeZip({ manifest_version: 3, version: '3.0.2', name: 'Unroute' });
+    let publishCalls = 0;
+    const fetcher = async url => {
+      if (url.includes('oauth2.googleapis.com/token')) return jsonResponse({ access_token: 'tok-4' });
+      if (url.endsWith(':fetchStatus')) return jsonResponse({});
+      if (url.endsWith(':upload')) return jsonResponse({ uploadState: 'SUCCEEDED', crxVersion: '3.0.2' });
+      if (url.endsWith(':publish')) {
+        publishCalls += 1;
+        return jsonResponse({ error: { message: 'Forbidden' } }, 403);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    };
+
+    let caught = null;
+    try {
+      await publishToCws({
+        version: '3.0.2',
+        publisherId: 'pub-1',
+        extensionId: 'ext-1',
+        clientId: 'cid',
+        clientSecret: 'csec',
+        refreshToken: 'rtok',
+        zipBytes: bytes,
+        expectedSha256: sha256,
+        fetcher,
+        sleep: async () => {},
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(publishCalls).to.equal(1);
+    expect(caught).to.be.an('error');
+    expect(caught.message).to.include('Uploaded v3.0.2 to Chrome Web Store draft');
+  });
 });

@@ -62,7 +62,9 @@ async function fetchJson(url, options, fetcher = fetch) {
   }
   if (!response.ok) {
     const detail = data?.error?.message || data?.error_description || data?.error || text.slice(0, 500);
-    throw new Error(`HTTP ${response.status} from ${url}: ${detail}`);
+    const err = new Error(`HTTP ${response.status} from ${url}: ${detail}`);
+    err.status = response.status;
+    throw err;
   }
   return data;
 }
@@ -140,6 +142,8 @@ export async function publishToCws({
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   pollIntervalMs = 5000,
   maxPollAttempts = 24,
+  publishMaxAttempts = 6,
+  publishRetryDelayMs = 5000,
 }) {
   validVersion(version);
   assert.ok(publisherId && extensionId, 'CWS_PUBLISHER_ID and CWS_EXTENSION_ID must be configured');
@@ -203,14 +207,45 @@ export async function publishToCws({
     throw new Error(`Chrome Web Store upload did not succeed (state: ${uploadState || 'unknown'})`);
   }
 
-  const publishRes = await fetchJson(`${CWS_API_BASE}/${itemPath}:publish`, {
-    method: 'POST',
-    headers: {
-      ...authHeader,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ publishType }),
-  }, fetcher);
+  const retryablePublishStatuses = new Set([400, 409, 429, 500, 502, 503, 504]);
+  let publishRes = null;
+  let lastPublishError = null;
+  for (let attempt = 1; attempt <= publishMaxAttempts; attempt += 1) {
+    try {
+      publishRes = await fetchJson(`${CWS_API_BASE}/${itemPath}:publish`, {
+        method: 'POST',
+        headers: {
+          ...authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ publishType }),
+      }, fetcher);
+      lastPublishError = null;
+      break;
+    } catch (err) {
+      lastPublishError = err;
+      if (!retryablePublishStatuses.has(err?.status) || attempt >= publishMaxAttempts) {
+        break;
+      }
+      await sleep(publishRetryDelayMs * attempt);
+      const current = extractStatusVersions(await fetchStatus());
+      if (current.published.includes(version) || current.submitted.includes(version)) {
+        return {
+          action: 'submitted',
+          version,
+          publishType,
+          uploadState,
+          publishState: current.submittedState || current.publishedState || 'SUBMITTED',
+        };
+      }
+    }
+  }
+
+  if (lastPublishError) {
+    throw new Error(
+      `Uploaded v${version} to Chrome Web Store draft, but publish failed after ${publishMaxAttempts} attempt(s): ${lastPublishError.message}`
+    );
+  }
 
   return {
     action: 'submitted',
