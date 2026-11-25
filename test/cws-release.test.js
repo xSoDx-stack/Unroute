@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import JSZip from 'jszip';
 import {
   verifyChromeArchive,
+  resolveExpectedChromeSha256,
   publishToCws,
 } from '../.github/scripts/cws-release.mjs';
 
@@ -215,5 +216,21 @@ describe('Chrome Web Store API v2 publication', () => {
     expect(publishCalls).to.equal(1);
     expect(caught).to.be.an('error');
     expect(caught.message).to.include('Uploaded v3.0.2 to Chrome Web Store draft');
+  });
+
+  it('resolves Chrome archive SHA-256 without .sha256 release asset (embedded meta or GitHub digest)', () => {
+    const shaA = 'a'.repeat(64);
+    const shaB = 'b'.repeat(64);
+    const fromMeta = resolveExpectedChromeSha256({
+      body: `Release notes\n\n<!-- unroute-amo-meta:${JSON.stringify({ files: { chrome: { name: 'unroute-v3.0.2-chrome-mv3.zip', sha256: shaA } } })}-->`,
+      assets: [{ name: 'unroute-v3.0.2-chrome-mv3.zip', digest: `sha256:${shaB}` }],
+    }, '3.0.2', null);
+    expect(fromMeta).to.equal(shaA);
+
+    const fromDigest = resolveExpectedChromeSha256({
+      body: 'Release notes without meta',
+      assets: [{ name: 'unroute-v3.0.2-chrome-mv3.zip', digest: `sha256:${shaB}` }],
+    }, '3.0.2', null);
+    expect(fromDigest).to.equal(shaB);
   });
 });

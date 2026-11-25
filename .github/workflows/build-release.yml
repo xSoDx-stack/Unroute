@@ -120,40 +120,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Extract extension version
-        shell: bash
-        run: |
-          version=$(node -p "require('./dist/chromium/manifest.json').version")
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Create Chrome Web Store archive
-        shell: bash
-        run: |
-          cd dist/chromium
-          zip -r "$GITHUB_WORKSPACE/unroute-v${VERSION}-chrome-mv3.zip" .
-
-      - name: Create Firefox archive
-        shell: bash
-        run: |
-          cd dist/firefox
-          zip -r "$GITHUB_WORKSPACE/unroute-v${VERSION}-firefox-mv3.zip" .
-
-      - name: Upload verified Chrome artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unroute-v${{ env.VERSION }}-chrome-mv3
-          path: unroute-v${{ env.VERSION }}-chrome-mv3.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload verified Firefox artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: unroute-v${{ env.VERSION }}-firefox-mv3
-          path: unroute-v${{ env.VERSION }}-firefox-mv3.zip
-          if-no-files-found: error
-          retention-days: 30
-
   release:
     name: Publish GitHub Release
     needs: verify
@@ -197,21 +163,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/release-artifact"
-          gh run download "$GITHUB_RUN_ID" \
-            --name "unroute-v${VERSION}-chrome-mv3" \
-            --dir "$RUNNER_TEMP/release-artifact"
-          gh run download "$GITHUB_RUN_ID" \
-            --name "unroute-v${VERSION}-firefox-mv3" \
-            --dir "$RUNNER_TEMP/release-artifact"
+          mkdir -p "$RUNNER_TEMP/release-artifact" "$RUNNER_TEMP/store-submissions"
           gh run download "$GITHUB_RUN_ID" --name store-submissions --dir "$RUNNER_TEMP/store-submissions"
+          chromium_store=$(find "$RUNNER_TEMP/store-submissions" -type f -name "unroute-v${VERSION}-chromium-store.zip" -print -quit)
+          firefox_store=$(find "$RUNNER_TEMP/store-submissions" -type f -name "unroute-v${VERSION}-firefox-store.zip" -print -quit)
           source_archive=$(find "$RUNNER_TEMP/store-submissions" -type f -name "unroute-v${VERSION}-sources.zip" -print -quit)
-          test -n "$source_archive"
-          cp "$source_archive" "$RUNNER_TEMP/release-artifact/"
-          chrome_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-chrome-mv3.zip"
-          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.zip"
-          test -f "$chrome_archive"
-          test -f "$firefox_archive"
+          test -n "$chromium_store" && test -n "$firefox_store" && test -n "$source_archive"
+          cp "$chromium_store" "$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-chrome-mv3.zip"
+          cp "$firefox_store" "$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.zip"
+          cp "$source_archive" "$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-sources.zip"
           node .github/scripts/amo-release.mjs prepare "$RUNNER_TEMP/release-artifact"
 
       - name: Create GitHub Release
@@ -221,9 +181,6 @@ jobs:
         run: |
           tag="${RELEASE_TAG}"
           chrome_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-chrome-mv3.zip"
-          firefox_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-firefox-mv3.zip"
-          source_archive="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-sources.zip"
-          request_file="$RUNNER_TEMP/release-artifact/unroute-v${VERSION}-amo-request.json"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite its assets." >&2
             exit 1
@@ -233,9 +190,7 @@ jobs:
             target_args=(--target "$GITHUB_SHA")
           fi
           gh release create "$tag" \
-            "$chrome_archive" "$chrome_archive.sha256" \
-            "$firefox_archive" "$firefox_archive.sha256" \
-            "$source_archive" "$source_archive.sha256" "$request_file" \
+            "$chrome_archive" \
             "${target_args[@]}" \
             --notes-file "$RUNNER_TEMP/release-artifact/release-notes.md" \
             --title "Unroute v${VERSION}"

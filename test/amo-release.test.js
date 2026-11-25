@@ -90,14 +90,16 @@ describe('AMO listed automation', () => {
     expect(error?.message).to.include('signature');
   });
 
-  it('updates only its own release-status section', () => {
+  it('updates only its own release-status section and preserves embedded metadata', () => {
     const original = 'User release notes\n\nOther details';
-    const updated = api.statusBody(original, 'pending', '3.0.1');
+    const withMeta = api.embedRequestMeta(api.statusBody(original, 'not-submitted', '3.0.1'), fixture);
+    const updated = api.statusBody(withMeta, 'pending', '3.0.1');
     expect(updated).to.include(original);
     const approved = api.statusBody(updated, 'approved', '3.0.1');
     expect(approved).to.include(original);
     expect(approved.match(/<!-- unroute-amo:start -->/g)).to.have.length(1);
     expect(approved).not.to.include('ожидает');
+    expect(api.extractRequestMeta(approved)).to.deep.equal(fixture);
   });
 
   it('never submits from the scheduled read-only poll when a version is absent', async () => {

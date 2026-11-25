@@ -4,8 +4,14 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { PublicationApi, reconcileRelease, prepareRelease, submitPackage } from '../.github/scripts/amo-release.mjs';
+import { PublicationApi, reconcileRelease, prepareRelease, submitPackage, embedRequestMeta, extractRequestMeta, buildVerifiedArtifacts } from '../.github/scripts/amo-release.mjs';
+
+const exec = promisify(execFile);
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 // Local HTTP integration fixtures only. Signature bytes below are deliberately
 // not a real Mozilla signature; this tests transport and publication decisions.
@@ -144,19 +150,43 @@ describe('AMO publication local HTTP integration', () => {
     expect(state.requests.filter(r => r.path.startsWith('/api/') && r.method !== 'GET')).to.have.length(0);
   });
 
-  it('downloads approved files without JWT, verifies them, attaches XPI and hash once, and reads them back', async () => {
+  it('downloads approved files without JWT, verifies them, attaches only signed XPI once, and reads it back', async () => {
     state.version.file = { status: 'public', hash: 'sha256:' + hash(state.signed), url: 'https://addons.mozilla.org/firefox/downloads/file/44/fixture.xpi' };
     const api = client();
     const result = await reconcileRelease(api, structuredClone(state.release));
     expect(result.state).to.equal('approved');
-    expect(state.uploads).to.equal(2);
+    expect(state.uploads).to.equal(1);
     const download = state.requests.find(r => r.path.startsWith('/firefox/downloads/'));
     expect(download.authorization).to.equal(undefined);
     expect(state.release.assets.map(a => a.name)).to.include('unroute-v3.0.1-firefox-mv3.xpi');
+    expect(state.release.assets.map(a => a.name)).to.not.include('unroute-v3.0.1-firefox-mv3.xpi.sha256');
     expect(state.release.body).to.include('User release notes');
     await reconcileRelease(api, structuredClone(state.release));
-    expect(state.uploads).to.equal(2);
+    expect(state.uploads).to.equal(1);
     expect(state.requests.some(r => r.path.startsWith('/api/') && r.authorization?.startsWith('JWT '))).to.equal(true);
+  });
+
+  it('reconciles a clean release with zero service assets using embedded metadata and commit build', async () => {
+    state.release.assets = [{ id: 99, name: 'unroute-v3.0.1-chrome-mv3.zip', state: 'uploaded' }];
+    state.release.body = embedRequestMeta('Clean user release notes', state.request);
+    state.version.file = { status: 'public', hash: 'sha256:' + hash(state.signed), url: 'https://addons.mozilla.org/firefox/downloads/file/44/fixture.xpi' };
+    let buildCalls = 0;
+    const buildArtifacts = async req => {
+      buildCalls += 1;
+      expect(req.commit).to.equal(state.request.commit);
+      return { unsigned: state.unsigned, source: state.source };
+    };
+    const api = client();
+    const result = await reconcileRelease(api, structuredClone(state.release), { buildArtifacts });
+    expect(result.state).to.equal('approved');
+    expect(buildCalls).to.equal(1);
+    expect(state.release.assets.map(a => a.name)).to.deep.equal([
+      'unroute-v3.0.1-chrome-mv3.zip',
+      'unroute-v3.0.1-firefox-mv3.xpi',
+    ]);
+    // Subsequent hourly poll skips rebuilding once verified signed XPI is already attached
+    await reconcileRelease(api, structuredClone(state.release), { buildArtifacts });
+    expect(buildCalls).to.equal(1);
   });
 
   it('does not fetch or attach disabled versions', async () => {
@@ -201,18 +231,40 @@ describe('AMO publication local HTTP integration', () => {
     expect(state.uploads).to.equal(0);
   });
 
-  it('prepares real ZIP checksums, immutable intent and initial release status locally', async () => {
+  it('prepares embedded metadata and initial release status locally without auxiliary asset files', async () => {
     const dir = await mkdtemp(path.join(process.env.TMPDIR || os.tmpdir(), 'amo-prepare-test-'));
     try {
       for (const [name, bytes] of [['chrome-mv3', state.unsigned], ['firefox-mv3', state.unsigned], ['sources', state.source]]) {
         await writeFile(path.join(dir, `unroute-v3.0.1-${name}.zip`), bytes);
       }
       await prepareRelease(dir, { version, commit: state.request.commit, notes: 'Original notes' });
-      const request = JSON.parse(await readFile(path.join(dir, 'unroute-v3.0.1-amo-request.json'), 'utf8'));
+      const notes = await readFile(path.join(dir, 'release-notes.md'), 'utf8');
+      expect(notes).to.include('Original notes');
+      const request = extractRequestMeta(notes);
       expect(request.files.firefox.sha256).to.equal(hash(state.unsigned));
-      expect(await readFile(path.join(dir, 'unroute-v3.0.1-firefox-mv3.zip.sha256'), 'utf8'))
-        .to.equal(`${hash(state.unsigned)}  unroute-v3.0.1-firefox-mv3.zip\n`);
-      expect(await readFile(path.join(dir, 'release-notes.md'), 'utf8')).to.include('Original notes');
+      expect(request.files.chrome.sha256).to.equal(hash(state.unsigned));
+      expect(request.files.source.sha256).to.equal(hash(state.source));
     } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('deterministically builds bit-identical Firefox and source ZIPs from a verified git commit', async function () {
+    this.timeout(60000);
+    const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: repoRoot });
+    const headCommit = stdout.trim();
+    const pkg = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
+    const first = await buildVerifiedArtifacts({
+      repository: 'test/repo',
+      commit: headCommit,
+      version: pkg.version,
+      repoUrl: repoRoot,
+    });
+    const second = await buildVerifiedArtifacts({
+      repository: 'test/repo',
+      commit: headCommit,
+      version: pkg.version,
+      repoUrl: repoRoot,
+    });
+    expect(hash(first.unsigned)).to.equal(hash(second.unsigned));
+    expect(hash(first.source)).to.equal(hash(second.source));
   });
 });

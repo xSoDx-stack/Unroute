@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { readFile, writeFile, mkdir, mkdtemp, rm, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp, rm, appendFile, symlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
@@ -15,6 +15,8 @@ const GH = 'https://api.github.com';
 const MAX_BYTES = 64 * 1024 * 1024;
 const startMarker = '<!-- unroute-amo:start -->';
 const endMarker = '<!-- unroute-amo:end -->';
+const metaPrefix = '<!-- unroute-amo-meta:';
+const metaSuffix = '-->';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const exec = promisify(execFile);
 
@@ -44,7 +46,38 @@ export function validateRequest(request, version) {
     assert.equal(request.files?.[key]?.name, `unroute-v${version}-${suffix}`);
     assert.match(request.files[key].sha256, /^[a-f0-9]{64}$/);
   }
+  if (request.files?.chrome !== undefined) {
+    assert.equal(request.files.chrome?.name, `unroute-v${version}-chrome-mv3.zip`);
+    assert.match(request.files.chrome.sha256, /^[a-f0-9]{64}$/);
+  }
   return request;
+}
+
+export function embedRequestMeta(body = '', request) {
+  const serialized = JSON.stringify(request);
+  assert.ok(!serialized.includes('-->'), 'Request metadata cannot contain HTML comment terminator');
+  const block = `${metaPrefix}${serialized}${metaSuffix}`;
+  const first = body.indexOf(metaPrefix);
+  if (first !== -1) {
+    const last = body.indexOf(metaSuffix, first + metaPrefix.length);
+    assert.ok(last !== -1, 'Malformed AMO metadata comment');
+    return body.slice(0, first) + block + body.slice(last + metaSuffix.length);
+  }
+  const statusIdx = body.indexOf(startMarker);
+  if (statusIdx !== -1) {
+    return `${body.slice(0, statusIdx).trimEnd()}\n\n${block}\n\n${body.slice(statusIdx)}`;
+  }
+  return `${body.trimEnd()}\n\n${block}\n`;
+}
+
+export function extractRequestMeta(body = '') {
+  const text = String(body || '');
+  const first = text.indexOf(metaPrefix);
+  if (first === -1) return null;
+  const last = text.indexOf(metaSuffix, first + metaPrefix.length);
+  assert.ok(last !== -1, 'Malformed AMO metadata comment');
+  assert.equal(text.indexOf(metaPrefix, last + metaSuffix.length), -1, 'Duplicate AMO metadata comment');
+  return JSON.parse(text.slice(first + metaPrefix.length, last).trim());
 }
 
 export function amoState(addon, version) {
@@ -82,7 +115,7 @@ export function statusBody(body = '', state, version) {
     'submission-failed': 'Отправка в AMO не подтверждена. Проверьте настройки/валидацию и повторите разрешённую отправку.',
   };
   assert.ok(messages[state], 'Unknown AMO state');
-  const section = `${startMarker}\n**Firefox ${version}:** ${messages[state]}\nFirefox ZIP — неподписанный пакет; для обычной установки используйте подписанный XPI.\n${endMarker}`;
+  const section = `${startMarker}\n**Firefox ${version}:** ${messages[state]}\n${endMarker}`;
   const first = body.indexOf(startMarker), last = body.indexOf(endMarker);
   if (first !== -1 || last !== -1) {
     assert.ok(first !== -1 && last > first, 'Malformed AMO status section');
@@ -250,13 +283,81 @@ export async function prepareRelease(directory, { version, commit, notes = '' })
     const hash = sha(bytes);
     const payload = await zipPayload(bytes);
     request.files[key] = { name, sha256: hash };
-    await writeFile(path.join(directory, `${name}.sha256`), `${hash}  ${name}\n`);
     if (key === 'firefox') checkManifest(payload.get('manifest.json'), version);
   }
   validateRequest(request, version);
-  await writeFile(path.join(directory, `unroute-v${version}-amo-request.json`), JSON.stringify(request, null, 2) + '\n');
-  await writeFile(path.join(directory, 'release-notes.md'), statusBody(notes, 'not-submitted', version));
+  const withStatus = statusBody(notes, 'not-submitted', version);
+  await writeFile(path.join(directory, 'release-notes.md'), embedRequestMeta(withStatus, request));
   return request;
+}
+
+export async function buildVerifiedArtifacts({
+  repository,
+  token = '',
+  commit,
+  version,
+  temporaryRoot = os.tmpdir(),
+  repoUrl = '',
+}) {
+  validVersion(version);
+  assert.match(commit || '', /^[a-f0-9]{40}$/, 'Invalid commit SHA');
+  if (!repoUrl) assert.match(repository || '', /^[\w.-]+\/[\w.-]+$/, 'Invalid GitHub repository');
+  const temp = await mkdtemp(path.join(temporaryRoot, 'unroute-build-'));
+  try {
+    const workDir = path.join(temp, 'work');
+    await mkdir(workDir);
+    const allowedEnv = new Set(['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'TMPDIR',
+      'APPDATA', 'LOCALAPPDATA', 'LANG', 'LC_ALL', 'NODE_EXTRA_CA_CERTS']);
+    const baseEnv = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => allowedEnv.has(k))),
+      GIT_TERMINAL_PROMPT: '0',
+    };
+    const fetchEnv = (!repoUrl && token)
+      ? {
+        ...baseEnv,
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
+      }
+      : baseEnv;
+    const origin = repoUrl || `https://github.com/${repository}.git`;
+    await exec('git', ['init', '-q'], { cwd: workDir, env: baseEnv });
+    await exec('git', ['config', 'core.autocrlf', 'false'], { cwd: workDir, env: baseEnv });
+    await exec('git', ['fetch', '--depth', '1', '--no-tags', origin, commit], { cwd: workDir, timeout: 120000, env: fetchEnv });
+    await exec('git', ['checkout', '-q', '--detach', 'FETCH_HEAD'], { cwd: workDir, env: baseEnv });
+
+    const [rootLock, workLock] = await Promise.all([
+      readFile(path.join(root, 'package-lock.json'), 'utf8').catch(() => null),
+      readFile(path.join(workDir, 'package-lock.json'), 'utf8'),
+    ]);
+    if (rootLock !== null && rootLock.replace(/\r\n/g, '\n') === workLock.replace(/\r\n/g, '\n')) {
+      await symlink(path.join(root, 'node_modules'), path.join(workDir, 'node_modules'), 'junction');
+    } else {
+      const npmCliJs = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
+      const hasNpmCli = await readFile(npmCliJs).then(() => true, () => false);
+      if (hasNpmCli) {
+        await exec(process.execPath, [npmCliJs, 'ci', '--no-audit', '--no-fund'], { cwd: workDir, timeout: 300000, env: baseEnv });
+      } else {
+        await exec('npm', ['ci', '--no-audit', '--no-fund'], {
+          cwd: workDir, timeout: 300000, env: baseEnv, shell: process.platform === 'win32',
+        });
+      }
+    }
+    await exec(process.execPath, [path.join(workDir, 'node_modules/gulp/bin/gulp.js'), 'buildTargets'], {
+      cwd: workDir, timeout: 120000, env: baseEnv,
+    });
+    await exec(process.execPath, [path.join(workDir, 'scripts/package-stores.mjs')], {
+      cwd: workDir, timeout: 120000, env: baseEnv,
+    });
+    const outDir = path.join(workDir, 'artifacts', `v${version}`);
+    const [unsigned, source] = await Promise.all([
+      readFile(path.join(outDir, `unroute-v${version}-firefox-store.zip`)),
+      readFile(path.join(outDir, `unroute-v${version}-sources.zip`)),
+    ]);
+    return { unsigned, source };
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 }
 
 export async function submitPackage(addon, unsigned, source, temporaryRoot, { execute = exec, environment = process.env } = {}) {
@@ -290,27 +391,56 @@ export async function submitPackage(addon, unsigned, source, temporaryRoot, { ex
   }
 }
 
-export async function reconcileRelease(api, release, { allowSubmit = false, temporaryRoot = os.tmpdir(), submit = submitPackage } = {}) {
+export async function reconcileRelease(api, release, {
+  allowSubmit = false,
+  temporaryRoot = os.tmpdir(),
+  submit = submitPackage,
+  buildArtifacts = req => buildVerifiedArtifacts({
+    repository: api.repository,
+    token: api.token,
+    commit: req.commit,
+    version: req.version,
+    temporaryRoot,
+  }),
+} = {}) {
   if (release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(release.tag_name)) return { state: 'skipped' };
   const version = release.tag_name.slice(1), marker = `unroute-v${version}-amo-request.json`;
-  if (!release.assets.some(asset => asset.name === marker)) return { state: 'skipped' };
-  const request = validateRequest(JSON.parse((await api.assetBytes(api.asset(release, marker))).toString('utf8')), version);
+  let rawRequest = extractRequestMeta(release.body || '');
+  if (!rawRequest && release.assets.some(asset => asset.name === marker)) {
+    rawRequest = JSON.parse((await api.assetBytes(api.asset(release, marker))).toString('utf8'));
+  }
+  if (!rawRequest) return { state: 'skipped' };
+  const request = validateRequest(rawRequest, version);
   let ref = (await api.json('github', `git/ref/tags/${release.tag_name}`)).object;
   for (let count = 0; ref.type === 'tag' && count < 5; count++) ref = (await api.json('github', `git/tags/${ref.sha}`)).object;
   assert.equal(ref.type, 'commit');
   assert.equal(ref.sha, request.commit, 'Release tag does not match verified build commit');
-  const unsigned = await api.assetBytes(api.asset(release, request.files.firefox.name));
-  assert.equal(sha(unsigned), request.files.firefox.sha256, 'Verified Firefox ZIP hash mismatch');
-  checkManifest((await zipPayload(unsigned)).get('manifest.json'), version);
-  let addon = await api.json('amo', `addon/${encodeURIComponent(ADDON)}/`);
-  const existing = await api.lookup(version);
+
+  let builtPromise = null;
+  const ensureBuilt = () => {
+    if (!builtPromise) builtPromise = buildArtifacts(request);
+    return builtPromise;
+  };
+  const getUnsigned = async () => {
+    const unsigned = release.assets.some(asset => asset.name === request.files.firefox.name)
+      ? await api.assetBytes(api.asset(release, request.files.firefox.name))
+      : (await ensureBuilt()).unsigned;
+    assert.equal(sha(unsigned), request.files.firefox.sha256, 'Verified Firefox ZIP hash mismatch');
+    checkManifest((await zipPayload(unsigned)).get('manifest.json'), version);
+    return unsigned;
+  };
   const getSource = async () => {
-    const source = await api.assetBytes(api.asset(release, request.files.source.name));
+    const source = release.assets.some(asset => asset.name === request.files.source.name)
+      ? await api.assetBytes(api.asset(release, request.files.source.name))
+      : (await ensureBuilt()).source;
     assert.equal(sha(source), request.files.source.sha256, 'Reviewer source ZIP hash mismatch');
     return source;
   };
+
+  let addon = await api.json('amo', `addon/${encodeURIComponent(ADDON)}/`);
+  const existing = await api.lookup(version);
   const result = await processVersion({ request, addon, existing, allowSubmit, lookup: () => api.lookup(version), submit: async () => {
-    const source = await getSource();
+    const [unsigned, source] = await Promise.all([getUnsigned(), getSource()]);
     await submit(addon, unsigned, source, temporaryRoot);
   } });
   if (allowSubmit && result.version?.channel === 'listed' && !result.version.source) {
@@ -325,11 +455,20 @@ export async function reconcileRelease(api, release, { allowSubmit = false, temp
   }
   if (result.state === 'approved') {
     const file = result.version.file;
-    const signed = await api.download(file.url, 'amo');
-    await checkSignedXpi(signed, unsigned, request, file.hash);
     const name = `unroute-v${version}-firefox-mv3.xpi`;
-    await api.upload(release, name, signed, 'application/x-xpinstall');
-    await api.upload(release, `${name}.sha256`, Buffer.from(`${sha(signed)}  ${name}\n`), 'text/plain');
+    const existingXpiAsset = release.assets.find(asset => asset.name === name);
+    let alreadyVerified = false;
+    if (existingXpiAsset && /^sha256:[a-f0-9]{64}$/i.test(file.hash || '')) {
+      const existingBytes = await api.assetBytes(api.asset(release, name));
+      if (sha(existingBytes) === file.hash.slice(7).toLowerCase()) {
+        alreadyVerified = true;
+      }
+    }
+    if (!alreadyVerified) {
+      const [signed, unsigned] = await Promise.all([api.download(file.url, 'amo'), getUnsigned()]);
+      await checkSignedXpi(signed, unsigned, request, file.hash);
+      await api.upload(release, name, signed, 'application/x-xpinstall');
+    }
   }
   await api.status(release, result.state, version);
   return { state: result.state, version };

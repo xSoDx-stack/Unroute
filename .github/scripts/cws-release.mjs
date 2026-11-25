@@ -86,6 +86,36 @@ export async function exchangeRefreshToken({ clientId, clientSecret, refreshToke
   return data.access_token;
 }
 
+export function resolveExpectedChromeSha256(release, version, shaBytes = null) {
+  const zipName = `unroute-v${version}-chrome-mv3.zip`;
+  const body = String(release?.body || '');
+  const metaPrefix = '<!-- unroute-amo-meta:';
+  const start = body.indexOf(metaPrefix);
+  if (start !== -1) {
+    const end = body.indexOf('-->', start + metaPrefix.length);
+    assert.ok(end !== -1, 'Malformed release metadata comment');
+    const meta = JSON.parse(body.slice(start + metaPrefix.length, end).trim());
+    const embeddedSha = meta?.files?.chrome?.sha256;
+    if (typeof embeddedSha === 'string' && /^[a-f0-9]{64}$/i.test(embeddedSha)) {
+      return embeddedSha.toLowerCase();
+    }
+  }
+  if (shaBytes) {
+    const shaName = `${zipName}.sha256`;
+    const shaLine = shaBytes.toString('utf8').trim();
+    const match = shaLine.match(/^([a-f0-9]{64})\s+\*?(.+)$/i);
+    assert.ok(match, `Malformed checksum file ${shaName}`);
+    assert.equal(match[2].trim(), zipName, `Checksum file ${shaName} references unexpected file ${match[2]}`);
+    return match[1].toLowerCase();
+  }
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const zipAsset = assets.find(a => a.name === zipName);
+  if (typeof zipAsset?.digest === 'string' && /^sha256:[a-f0-9]{64}$/i.test(zipAsset.digest)) {
+    return zipAsset.digest.slice(7).toLowerCase();
+  }
+  throw new Error(`GitHub Release v${version} has no verifiable SHA-256 metadata for ${zipName}`);
+}
+
 async function downloadReleaseAsset({ repository, token, version }, fetcher = fetch) {
   assert.ok(repository && token, 'GITHUB_REPOSITORY and GH_TOKEN must be configured');
   const tag = `v${version}`;
@@ -102,7 +132,6 @@ async function downloadReleaseAsset({ repository, token, version }, fetcher = fe
   const zipAsset = assets.find(a => a.name === zipName);
   const shaAsset = assets.find(a => a.name === shaName);
   assert.ok(zipAsset?.url, `GitHub Release ${tag} does not contain ${zipName}`);
-  assert.ok(shaAsset?.url, `GitHub Release ${tag} does not contain ${shaName}`);
 
   const downloadBinary = async assetUrl => {
     const res = await fetcher(assetUrl, {
@@ -118,13 +147,10 @@ async function downloadReleaseAsset({ repository, token, version }, fetcher = fe
 
   const [zipBytes, shaBytes] = await Promise.all([
     downloadBinary(zipAsset.url),
-    downloadBinary(shaAsset.url),
+    shaAsset?.url ? downloadBinary(shaAsset.url) : Promise.resolve(null),
   ]);
-  const shaLine = shaBytes.toString('utf8').trim();
-  const match = shaLine.match(/^([a-f0-9]{64})\s+\*?(.+)$/i);
-  assert.ok(match, `Malformed checksum file ${shaName}`);
-  assert.equal(match[2].trim(), zipName, `Checksum file ${shaName} references unexpected file ${match[2]}`);
-  return { zipBytes, expectedSha256: match[1].toLowerCase() };
+  const expectedSha256 = resolveExpectedChromeSha256(release, version, shaBytes);
+  return { zipBytes, expectedSha256 };
 }
 
 export async function publishToCws({

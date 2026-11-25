@@ -8,12 +8,18 @@ describe('Asynchronous AMO listed release workflows', () => {
     expect(workflow).not.to.include('--channel unlisted');
   });
 
-  it('publishes GitHub artifacts without waiting for Mozilla signing', () => {
-    const release = workflow.split('  release:')[1];
+  it('publishes only user-facing Chrome ZIP on release creation without waiting for Mozilla signing', () => {
+    const release = workflow.split('  release:')[1].split('  amo-publish:')[0];
     expect(release).to.be.a('string');
     expect(release).to.match(/needs:\s+verify/);
     expect(release).not.to.include('needs: [verify, sign-firefox]');
-    expect(release).to.include('firefox-mv3.zip');
+    expect(release).to.include('chrome-mv3.zip');
+    const createCmd = release.split('gh release create')[1];
+    expect(createCmd).to.include('"$chrome_archive"');
+    expect(createCmd).not.to.include('.sha256');
+    expect(createCmd).not.to.include('amo-request.json');
+    expect(createCmd).not.to.include('$firefox_archive');
+    expect(createCmd).not.to.include('$source_archive');
   });
 
   it('protects the initial listed activation with an explicit repository variable', () => {
